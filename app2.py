@@ -4,6 +4,7 @@ import docx
 import re
 import pytesseract
 from pdf2image import convert_from_bytes
+from skill_analyzer import SkillAnalyzer
 
 # ---------------- CONFIG ----------------
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -11,6 +12,8 @@ POPPLER_PATH = r"C:\Users\Preethi shubha\Downloads\Release-25.12.0-0\poppler-25.
 
 st.set_page_config(page_title="Talent Intelligence Platform", layout="wide")
 st.title("🤖 AI-Powered Talent Intelligence Platform")
+
+skill_analyzer = SkillAnalyzer()
 
 # ---------------- ROLE LIST ----------------
 roles_list = [
@@ -395,66 +398,172 @@ if file is not None and role:
         
         st.markdown("---")
         
-        # Skills Analysis
+               # Advanced Skills Analysis with SkillAnalyzer
+        st.markdown("### 🧠 Advanced Skill Analysis")
+        
+        # Extract advanced skills using SkillAnalyzer
+        skill_analysis = skill_analyzer.extract_skills(text)
+        
+        # Display skill categories
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("**📊 Skills by Category**")
+            if skill_analysis["categories"]:
+                for category, skills in list(skill_analysis["categories"].items())[:3]:
+                    category_name = category.replace('_', ' ').title()
+                    st.write(f"**{category_name}:**")
+                    for skill in skills[:3]:
+                        st.write(f"  • {skill.title()}")
+                    if len(skills) > 3:
+                        st.write(f"  +{len(skills)-3} more")
+            else:
+                st.write("No skills detected")
+        
+        with col2:
+            st.markdown("**📈 Skill Statistics**")
+            st.write(f"**Total Skills:** {skill_analysis['total_count']}")
+            st.write(f"**Categories:** {len(skill_analysis['categories'])}")
+            
+            # Show proficiency distribution
+            if skill_analysis["skills"]:
+                expert_count = sum(1 for s in skill_analysis["skills"] if s["proficiency"] == "expert")
+                inter_count = sum(1 for s in skill_analysis["skills"] if s["proficiency"] == "intermediate")
+                beginner_count = sum(1 for s in skill_analysis["skills"] if s["proficiency"] == "beginner")
+                
+                st.write(f"🟢 **Expert:** {expert_count}")
+                st.write(f"🟡 **Intermediate:** {inter_count}")
+                st.write(f"🔴 **Beginner:** {beginner_count}")
+        
+        with col3:
+            st.markdown("**🎯 Match Analysis**")
+            if required_skills:
+                # Calculate advanced skill match
+                skill_match_result = skill_analyzer.calculate_skill_match_advanced(
+                    skill_analysis["skills"],
+                    required_skills
+                )
+                
+                st.write(f"**Match Score:** {skill_match_result['score']:.0f}%")
+                st.write(f"**Matched:** {skill_match_result['match_count']}/{len(required_skills)}")
+                
+                # Update the match_percentage and matched_skills with advanced results
+                match_percentage = skill_match_result['score']
+                matched_skills = [s["name"] for s in skill_match_result['matched']]
+                missing_skills = skill_match_result['missing']
+            else:
+                st.write("No skills specified")
+        
+        st.markdown("---")
+        
+        # Enhanced Verified Competencies with Proficiency
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("### ✅ Verified Competencies")
-            if matched_skills:
-                for skill in matched_skills:
-                    st.write(f"• {skill}")
+            st.markdown("### ✅ Verified Competencies (with Proficiency)")
+            if skill_match_result and skill_match_result.get('matched'):
+                # Group by proficiency
+                expert_skills = [s for s in skill_match_result['matched'] if s.get('proficiency') == 'expert']
+                inter_skills = [s for s in skill_match_result['matched'] if s.get('proficiency') == 'intermediate']
+                beginner_skills = [s for s in skill_match_result['matched'] if s.get('proficiency') == 'beginner']
+                
+                if expert_skills:
+                    st.markdown("**🟢 Expert Level:**")
+                    for skill in expert_skills:
+                        st.write(f"  • {skill['name'].title()}")
+                
+                if inter_skills:
+                    st.markdown("**🟡 Intermediate Level:**")
+                    for skill in inter_skills:
+                        st.write(f"  • {skill['name'].title()}")
+                
+                if beginner_skills:
+                    st.markdown("**🔴 Beginner Level:**")
+                    for skill in beginner_skills:
+                        st.write(f"  • {skill['name'].title()}")
             else:
                 st.write("• No matching competencies identified")
             
-            st.markdown("### 🛠️ Extracted Technical Skills")
-            if extracted_skills:
-                for skill in extracted_skills[:10]:
-                    st.write(f"• {skill.title()}")
+            st.markdown("### 🛠️ All Extracted Technical Skills")
+            if skill_analysis["skills"]:
+                # Show all extracted skills with proficiency
+                for skill in skill_analysis["skills"][:10]:
+                    prof_icon = "🟢" if skill['proficiency'] == 'expert' else "🟡" if skill['proficiency'] == 'intermediate' else "🔴" if skill['proficiency'] == 'beginner' else "⚪"
+                    st.write(f"{prof_icon} {skill['name'].title()} - *{skill['proficiency'].title()}*")
+                if len(skill_analysis["skills"]) > 10:
+                    st.write(f"... and {len(skill_analysis['skills'])-10} more")
             else:
                 st.write("• No technical skills detected")
         
         with col2:
             st.markdown("### ❌ Development Areas")
             if missing_skills:
-                for skill in missing_skills:
-                    st.write(f"• {skill}")
+                for skill in missing_skills[:5]:
+                    st.write(f"• {skill.title()}")
+                if len(missing_skills) > 5:
+                    st.write(f"• ... and {len(missing_skills)-5} more")
             else:
                 st.write("• No significant gaps identified")
+            
+            st.markdown("### 📚 Learning Recommendations")
+            if missing_skills:
+                recommendations = skill_analyzer.suggest_learning_path(missing_skills)
+                for rec in recommendations[:3]:
+                    priority_icon = "🔥" if rec["priority"] == 1 else "📘" if rec["priority"] == 2 else "📖"
+                    st.write(f"{priority_icon} **{rec['skill'].title()}**")
+                    st.write(f"   ⏱️ {rec['estimated_time']}")
+                    st.write(f"   📖 {rec['resources'][0]}")
+            else:
+                st.write("• No learning recommendations needed")
             
             st.markdown("### 📋 Profile Completeness")
             for section, present in sections.items():
                 status = "✅" if present else "❌"
                 st.write(f"{status} {section.replace('_', ' ').title()}")
-        
-        st.markdown("---")
-        
-        # Strategic Insights
-        st.markdown("### 💡 Strategic Recommendations")
-        for insight in insights:
-            st.write(insight)
-        
-        # Compatibility Score Visualization
+
+
+               # Enhanced Compatibility Score Visualization
         st.markdown("---")
         st.markdown("### 🎯 Overall Compatibility Assessment")
+        
+        # Add proficiency-weighted score explanation
+        st.markdown("**Score includes proficiency weighting:** Expert skills contribute more to final score")
         
         if match_percentage >= 70:
             st.success(f"**{match_percentage:.0f}% Compatible** - Strong alignment with position requirements")
             st.progress(match_percentage/100)
-            st.info("**Recommendation:** Proceed to interview stage. Candidate demonstrates strong technical capabilities.")
+            
+            # Add proficiency insight
+            if skill_match_result and skill_match_result.get('matched'):
+                expert_skills = [s for s in skill_match_result['matched'] if s.get('proficiency') == 'expert']
+                if expert_skills:
+                    st.info(f"💪 **Strength:** Expert-level proficiency detected in {len(expert_skills)} critical skills including {expert_skills[0]['name'].title()}")
+            
+            st.info("**Recommendation:** Proceed to interview stage. Candidate demonstrates strong technical capabilities with advanced proficiency in key areas.")
+            
         elif match_percentage >= 40:
             st.warning(f"**{match_percentage:.0f}% Compatible** - Moderate alignment with position requirements")
             st.progress(match_percentage/100)
-            st.info("**Recommendation:** Consider for further assessment. Some skill gaps identified that can be addressed through training.")
+            
+            # Suggest focus areas
+            if missing_skills:
+                st.info(f"🎯 **Focus Areas:** Prioritize developing {', '.join(missing_skills[:3])}")
+            
+            st.info("**Recommendation:** Consider for further assessment. Some skill gaps identified that can be addressed through targeted training.")
+            
         else:
             st.error(f"**{match_percentage:.0f}% Compatible** - Limited alignment with position requirements")
             st.progress(match_percentage/100)
-            st.info("**Recommendation:** Consider alternative positions or skill development program.")
+            
+            # Show learning path
+            if missing_skills:
+                st.info(f"📚 **Learning Path:** Recommended to start with {missing_skills[0].title()} as foundational skill")
+            
+            st.info("**Recommendation:** Consider alternative positions or enroll in skill development program.")
         
-        st.markdown("---")
-        
-        # Configuration Dashboard
-        with st.expander("⚙️ Evaluation Configuration", expanded=False):
-            st.markdown(f"""
+               # Enhanced Configuration Dashboard
+            with st.expander("⚙️ Evaluation Configuration & Advanced Metrics", expanded=False):
+             st.markdown(f"""
             ### Position Details
             - **Role:** {role}
             - **Required Competencies:** {', '.join(required_skills) if required_skills else 'Not specified'}
@@ -465,14 +574,14 @@ if file is not None and role:
             - Professional Certifications: {'✅ Active' if use_certifications else '❌ Inactive'}
             - Project Portfolio: {'✅ Active' if use_projects else '❌ Inactive'}
             
+            ### Advanced Skill Metrics
+            - **Total Skills Extracted:** {skill_analysis['total_count']}
+            - **Skill Categories:** {len(skill_analysis['categories'])}
+            - **Expert Level Skills:** {sum(1 for s in skill_analysis['skills'] if s['proficiency'] == 'expert')}
+            - **Intermediate Level Skills:** {sum(1 for s in skill_analysis['skills'] if s['proficiency'] == 'intermediate')}
+            - **Beginner Level Skills:** {sum(1 for s in skill_analysis['skills'] if s['proficiency'] == 'beginner')}
+            
             ### Bias Mitigation Protocol
             - **Mode:** {mode}
             - De-identified Factors: Gender, Age, Institution, Location, Personal Identifiers
             """)
-        
-    except Exception as e:
-        st.error(f"Assessment Error: {str(e)}")
-        st.info("Please ensure the file is a valid PDF or DOCX document.")
-
-else:
-    st.info("👆 **Getting Started:** Upload candidate documentation and specify the position to generate comprehensive assessment report.")
