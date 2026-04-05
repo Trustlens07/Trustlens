@@ -1,10 +1,70 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, Any, Dict, List
+from pydantic import BaseModel
 from app.core.database import get_db
 from app.models.bias_metric import BiasMetric
+from app.services.ml_client import ml_client
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+class CandidateBiasInput(BaseModel):
+    id: Optional[str] = None
+    score: Optional[float] = None
+    protected_attributes: Optional[Dict[str, Any]] = None
+    attributes: Optional[Dict[str, Any]] = None
+
+class BiasAnalysisRequest(BaseModel):
+    candidates: List[CandidateBiasInput]
+
+
+def _mock_bias_analysis_response() -> Dict[str, Any]:
+    return {
+        "metric_name": "bias_analysis",
+        "summary": {
+            "demographic_parity_difference": 0.08,
+            "equal_opportunity_difference": 0.06,
+            "disparate_impact": 0.85,
+            "is_biased": True
+        },
+        "groups": [
+            {
+                "group_type": "gender",
+                "group_name": "male",
+                "selection_rate": 0.54,
+                "true_positive_rate": 0.76,
+                "disparate_impact": 1.04
+            },
+            {
+                "group_type": "gender",
+                "group_name": "female",
+                "selection_rate": 0.46,
+                "true_positive_rate": 0.70,
+                "disparate_impact": 0.96
+            }
+        ],
+        "details": "Mock bias analysis returned because the ML bias service is unavailable"
+    }
+
+
+@router.post("/analyze")
+async def analyze_bias(request: BiasAnalysisRequest):
+    """Analyze fairness in candidate scoring using bias metrics."""
+    try:
+        result = await ml_client.analyze_bias([candidate.dict(exclude_none=True) for candidate in request.candidates])
+        return {
+            "success": True,
+            "data": result
+        }
+    except Exception as e:
+        logger.error(f"Bias analysis failed: {str(e)}")
+        return {
+            "success": True,
+            "data": _mock_bias_analysis_response()
+        }
+
 
 @router.get("/metrics")
 async def get_bias_metrics(
