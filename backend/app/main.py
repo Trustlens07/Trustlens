@@ -1,12 +1,16 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent))
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import text
-from app.core.config import settings
-from app.core.logging import setup_logging
-from app.api.v1.router import api_router
-from app.middlewares.error_handler import add_exception_handlers
-from app.middlewares.request_logger import RequestLoggerMiddleware
+from core.config import settings
+from core.logging import setup_logging
+from api.v1.router import api_router
+from middlewares.error_handler import add_exception_handlers
+from middlewares.request_logger import RequestLoggerMiddleware
 
 # Setup logging
 setup_logging()
