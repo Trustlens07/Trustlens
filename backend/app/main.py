@@ -2,6 +2,17 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
+import os
+from fastapi import FastAPI
+
+app = FastAPI()
+
+print("DATABASE_URL:", os.getenv("DATABASE_URL"))
+
+@app.get("/")
+def home():
+    return {"message": "API working"}
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
