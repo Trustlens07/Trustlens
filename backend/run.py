@@ -1,10 +1,11 @@
-from app.main import app
 import uvicorn
-import os
+from app.core.config import settings
 
 if __name__ == "__main__":
-    # Get port from Render (important)
-    port = int(os.environ.get("PORT", 10000))
-    
-    # Run FastAPI app
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.DEBUG,
+        log_level=settings.LOG_LEVEL.lower()
+    )
