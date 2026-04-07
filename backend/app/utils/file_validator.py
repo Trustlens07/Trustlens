@@ -1,7 +1,7 @@
 from fastapi import HTTPException, UploadFile
 from app.core.config import settings
-import magic
 import os
+import mimetypes
 
 class FileValidator:
     @staticmethod
@@ -30,8 +30,18 @@ class FileValidator:
         # Check MIME type
         file_content = file.file.read(1024)  # Read first 1KB for MIME detection
         file.file.seek(0)  # Reset to beginning
-        
-        mime = magic.from_buffer(file_content, mime=True)
+
+        # Prefer python-magic if available, otherwise fall back to mimetypes.
+        mime = None
+        try:
+            import magic  # type: ignore
+            mime = magic.from_buffer(file_content, mime=True)
+        except Exception:
+            mime = mimetypes.guess_type(file.filename)[0]
+            if mime is None:
+                # As a last resort, infer from extension.
+                mime = FileValidator.get_content_type(file.filename)
+
         allowed_mimes = [
             'application/pdf',
             'application/msword',
