@@ -7,24 +7,44 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Create database engine with connection pooling
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,  # Verify connections before using
-    pool_recycle=3600,   # Recycle connections after 1 hour
-    pool_size=10,        # Number of connections to keep in pool
-    max_overflow=20,     # Maximum overflow connections
-    echo=settings.DEBUG   # Log SQL queries in debug mode
-)
+def _create_engine():
+    if not settings.DATABASE_URL:
+        # Avoid crashing app import/startup when env is missing.
+        # Any DB-using endpoint will fail later with a clear message.
+        raise RuntimeError("DATABASE_URL is not set")
+    return create_engine(
+        settings.DATABASE_URL,
+        pool_pre_ping=True,  # Verify connections before using
+        pool_recycle=3600,   # Recycle connections after 1 hour
+        pool_size=10,        # Number of connections to keep in pool
+        max_overflow=20,     # Maximum overflow connections
+        echo=settings.DEBUG,  # Log SQL queries in debug mode
+    )
+
+
+# Create database engine with connection pooling (best-effort, don't crash startup)
+try:
+    engine = _create_engine()
+except Exception as e:
+    engine = None
+    logger.error("Database engine init failed (startup continues): %s", str(e))
+
+def _require_engine():
+    if engine is None:
+        raise RuntimeError("Database is not configured or unreachable (engine not initialized)")
+    return engine
+
 
 # Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_require_engine() if engine else None)
 
 # Base class for models
 Base = declarative_base()
 
 def get_db() -> Generator[Session, None, None]:
     """Dependency to get database session"""
+    if engine is None:
+        raise RuntimeError("Database is not configured or unreachable")
     db = SessionLocal()
     try:
         yield db
@@ -48,6 +68,8 @@ def init_database():
     from app.models import candidate, score, bias_metric, feedback
     
     try:
+        if engine is None:
+            raise RuntimeError("Database is not configured or unreachable")
         # Check if tables exist
         inspector = inspect(engine)
         existing_tables = inspector.get_table_names()
