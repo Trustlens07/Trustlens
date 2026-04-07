@@ -1,3 +1,12 @@
+import sys
+from pathlib import Path
+
+# Add the backend directory to Python path
+backend_dir = str(Path(__file__).parent.parent)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
+from app.core.config import settings  # This will now work
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
