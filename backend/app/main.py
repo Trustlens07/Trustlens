@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import text
-from app.core.config import settings
+from core.config import settings
 from app.core.logging import setup_logging
 from app.api.v1.router import api_router
 from app.middlewares.error_handler import add_exception_handlers
