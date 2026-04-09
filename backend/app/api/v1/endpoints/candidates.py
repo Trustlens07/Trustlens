@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from urllib.parse import urlparse, unquote
@@ -8,9 +8,11 @@ from app.core.database import get_db
 from app.services.storage_service import storage_service
 from app.utils.file_validator import FileValidator
 from app.models.candidate import Candidate, CandidateStatus
+from app.orchestrators.upload_orchestrator import UploadOrchestrator
 from app.models.score import Score
 from app.models.feedback import Feedback
 import logging
+from datetime import timezone
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -167,6 +169,131 @@ async def list_candidates(
             "limit": limit
         }
     }
+
+@router.post("/{candidate_id}/process")
+async def process_candidate(
+    candidate_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Trigger async ML pipeline for an existing candidate."""
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    if not candidate.file_url:
+        raise HTTPException(status_code=400, detail="Candidate has no file_url")
+
+    # Mark processing immediately so polling reflects the change.
+    candidate.status = CandidateStatus.PROCESSING
+    candidate.error_message = None
+    db.commit()
+
+    background_tasks.add_task(
+        UploadOrchestrator.process_resume,
+        candidate_id,
+        candidate.file_url,
+    )
+
+    return {
+        "candidate_id": candidate_id,
+        "status": "processing_started",
+        "message": "ML pipeline triggered",
+    }
+
+
+@router.get("/{candidate_id}/status")
+async def get_candidate_status(
+    candidate_id: str,
+    db: Session = Depends(get_db),
+):
+    """Polling endpoint: status + latest overall score + processed timestamp."""
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    score_row = (
+        db.query(Score)
+        .filter(Score.candidate_id == candidate_id)
+        .order_by(Score.version.desc(), Score.created_at.desc())
+        .first()
+    )
+
+    status_val = candidate.status.value if isinstance(candidate.status, CandidateStatus) else str(candidate.status)
+
+    processed_at = candidate.updated_at
+    if processed_at is not None:
+        if processed_at.tzinfo is None:
+            processed_at = processed_at.replace(tzinfo=timezone.utc)
+        processed_at = processed_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        processed_at = None
+
+    payload = {
+        "candidate_id": candidate_id,
+        "status": status_val,
+        "score": score_row.overall_score if score_row else None,
+        "processed_at": processed_at,
+    }
+    if candidate.error_message:
+        payload["error"] = candidate.error_message
+    return payload
+
+
+@router.get("/{candidate_id}/feedback")
+async def get_candidate_feedback_alias(
+    candidate_id: str,
+    db: Session = Depends(get_db),
+):
+    """Alias for GET /api/v1/feedback/candidate/{candidate_id} with flattened contract."""
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    feedback = (
+        db.query(Feedback)
+        .filter(Feedback.candidate_id == candidate_id)
+        .order_by(Feedback.created_at.desc())
+        .first()
+    )
+    score_row = (
+        db.query(Score)
+        .filter(Score.candidate_id == candidate_id)
+        .order_by(Score.version.desc(), Score.created_at.desc())
+        .first()
+    )
+    if not feedback:
+        return {
+            "candidate_id": candidate_id,
+            "score": score_row.overall_score if score_row else None,
+            "strengths": [],
+            "improvements": [],
+            "skill_match": {},
+            "recommendations": "",
+        }
+
+    def _to_list(val):
+        if val is None:
+            return []
+        if isinstance(val, list):
+            return val
+        if isinstance(val, str):
+            parts = [p.strip() for p in val.split(",")]
+            return [p for p in parts if p]
+        return [str(val)]
+
+    breakdown = score_row.breakdown if score_row and isinstance(score_row.breakdown, dict) else {}
+    skill_match = breakdown.get("skill_match") if isinstance(breakdown.get("skill_match"), dict) else {}
+
+    return {
+        "candidate_id": candidate_id,
+        "score": score_row.overall_score if score_row else None,
+        "strengths": _to_list(feedback.strengths),
+        "improvements": _to_list(feedback.improvements),
+        "skill_match": skill_match,
+        "recommendations": feedback.feedback_text or "",
+    }
+
 
 @router.get("/{candidate_id}")
 async def get_candidate(

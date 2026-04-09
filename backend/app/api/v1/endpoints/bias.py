@@ -6,6 +6,8 @@ from app.core.database import get_db
 from app.models.bias_metric import BiasMetric
 from app.services.ml_client import ml_client
 import logging
+from datetime import timezone
+from datetime import datetime
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -50,20 +52,97 @@ def _mock_bias_analysis_response() -> Dict[str, Any]:
 
 
 @router.post("/analyze")
-async def analyze_bias(request: BiasAnalysisRequest):
+async def analyze_bias(request: BiasAnalysisRequest, db: Session = Depends(get_db)):
     """Analyze fairness in candidate scoring using bias metrics."""
+    candidates_data = []
+    scores: list[float] = []
+    group_scores: Dict[str, list[float]] = {}
+    for c in request.candidates:
+        if c.score is not None:
+            s = float(c.score)
+            scores.append(s)
+        merged = {}
+        if c.attributes:
+            merged.update(c.attributes)
+        if c.protected_attributes:
+            merged.update(c.protected_attributes)
+        if c.id:
+            merged["id"] = c.id
+        candidates_data.append(merged)
+
+        # Track scores by group for local metrics computation
+        group = None
+        if c.protected_attributes and isinstance(c.protected_attributes, dict):
+            group = c.protected_attributes.get("group")
+        if group is None and c.attributes and isinstance(c.attributes, dict):
+            group = c.attributes.get("group")
+        if group is not None and c.score is not None:
+            group_scores.setdefault(str(group), []).append(s)
+
+    calculated_at = datetime.now(timezone.utc)
     try:
-        result = await ml_client.analyze_bias([candidate.dict(exclude_none=True) for candidate in request.candidates])
-        return {
-            "success": True,
-            "data": result
-        }
+        result = await ml_client.analyze_bias(candidates_data, scores)
     except Exception as e:
         logger.error(f"Bias analysis failed: {str(e)}")
-        return {
-            "success": True,
-            "data": _mock_bias_analysis_response()
-        }
+        result = _mock_bias_analysis_response()
+
+    # Persist metrics for GET /metrics. Compute from input so it's stable even if
+    # ML returns only `bias_detected` / `recommendations`.
+    avg_by_group: Dict[str, float] = {}
+    for g, vals in group_scores.items():
+        if vals:
+            avg_by_group[g] = sum(vals) / len(vals)
+
+    if avg_by_group:
+        # average_score_by_group
+        for g, avg in avg_by_group.items():
+            db.add(
+                BiasMetric(
+                    metric_name="average_score",
+                    group_type="group",
+                    group_name=g,
+                    metric_value=float(avg),
+                    threshold=None,
+                    is_biased="no",
+                    details={"n": len(group_scores.get(g, []))},
+                    calculated_at=calculated_at,
+                )
+            )
+
+        # demographic_parity_ratio (simple proxy): min(avg)/max(avg)
+        avgs = list(avg_by_group.values())
+        mx = max(avgs)
+        mn = min(avgs)
+        if mx > 0:
+            db.add(
+                BiasMetric(
+                    metric_name="demographic_parity_ratio",
+                    group_type="overall",
+                    group_name="overall",
+                    metric_value=float(mn / mx),
+                    threshold=0.8,
+                    is_biased="warning",
+                    details={"min_avg": mn, "max_avg": mx},
+                    calculated_at=calculated_at,
+                )
+            )
+
+        # equal_opportunity_diff (simple proxy): max(avg)-min(avg)
+        db.add(
+            BiasMetric(
+                metric_name="equal_opportunity_diff",
+                group_type="overall",
+                group_name="overall",
+                metric_value=float(mx - mn),
+                threshold=None,
+                is_biased="warning",
+                details={"min_avg": mn, "max_avg": mx},
+                calculated_at=calculated_at,
+            )
+        )
+
+    db.commit()
+    return {"success": True, "data": result}
 
 
 @router.get("/metrics")
@@ -71,30 +150,50 @@ async def get_bias_metrics(
     group_type: Optional[str] = Query(None, description="Filter by group type (gender, ethnicity, etc.)"),
     db: Session = Depends(get_db)
 ):
-    """Get bias metrics"""
-    query = db.query(BiasMetric)
+    """Get latest bias metrics in a compact overall format."""
+    base_query = db.query(BiasMetric)
     if group_type:
-        query = query.filter(BiasMetric.group_type == group_type)
-    
-    metrics = query.order_by(BiasMetric.calculated_at.desc()).all()
-    
-    return {
-        "success": True,
-        "data": [
-            {
-                "id": m.id,
-                "metric_name": m.metric_name,
-                "group_type": m.group_type,
-                "group_name": m.group_name,
-                "metric_value": m.metric_value,
-                "threshold": m.threshold,
-                "is_biased": m.is_biased,
-                "details": m.details,
-                "calculated_at": m.calculated_at.isoformat() if m.calculated_at else None
-            }
-            for m in metrics
-        ]
-    }
+        base_query = base_query.filter(BiasMetric.group_type == group_type)
+
+    latest = base_query.order_by(BiasMetric.calculated_at.desc()).first()
+    if not latest or not latest.calculated_at:
+        return {"overall": {}, "last_calculated": None}
+
+    latest_at = latest.calculated_at
+    rows = base_query.filter(BiasMetric.calculated_at == latest_at).all()
+
+    def _pick_value(names: list[str]) -> Optional[float]:
+        for n in names:
+            for r in rows:
+                if r.metric_name == n:
+                    return r.metric_value
+        return None
+
+    demographic_parity_ratio = _pick_value(
+        ["demographic_parity_ratio", "disparate_impact", "demographic_parity"]
+    )
+    equal_opportunity_diff = _pick_value(
+        ["equal_opportunity_diff", "equal_opportunity_difference", "equal_opportunity"]
+    )
+
+    average_score_by_group: Dict[str, float] = {}
+    for r in rows:
+        if r.metric_name in ("average_score_by_group", "average_score"):
+            average_score_by_group[r.group_name] = r.metric_value
+
+    if latest_at.tzinfo is None:
+        latest_at = latest_at.replace(tzinfo=timezone.utc)
+    last_calculated = latest_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    overall: Dict[str, Any] = {}
+    if demographic_parity_ratio is not None:
+        overall["demographic_parity_ratio"] = demographic_parity_ratio
+    if equal_opportunity_diff is not None:
+        overall["equal_opportunity_diff"] = equal_opportunity_diff
+    if average_score_by_group:
+        overall["average_score_by_group"] = average_score_by_group
+
+    return {"overall": overall, "last_calculated": last_calculated}
 
 @router.get("/summary")
 async def get_bias_summary(
