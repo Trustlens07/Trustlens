@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse, unquote
 from pydantic import BaseModel, EmailStr
 from app.core.config import settings
@@ -12,10 +12,107 @@ from app.orchestrators.upload_orchestrator import UploadOrchestrator
 from app.models.score import Score
 from app.models.feedback import Feedback
 import logging
-from datetime import timezone
+from datetime import timezone, datetime
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _iso_z(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _status_str(candidate: Candidate) -> str:
+    s = candidate.status
+    if isinstance(s, CandidateStatus):
+        return s.value
+    return str(s).lower()
+
+
+def _skill_match_contract(raw: Dict[str, float]) -> Dict[str, int]:
+    out: Dict[str, int] = {}
+    for k, v in raw.items():
+        try:
+            out[str(k)] = int(round(float(v)))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _to_list(val) -> List[str]:
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return [str(v).strip() for v in val if str(v).strip()]
+    if isinstance(val, str):
+        parts = [p.strip() for p in val.split(",")]
+        return [p for p in parts if p]
+    return [str(val).strip()] if str(val).strip() else []
+
+
+def _derive_skill_match(score_row: Optional[Score]) -> Dict[str, float]:
+    if not score_row:
+        return {}
+
+    breakdown: Dict[str, Any] = (
+        score_row.breakdown if isinstance(score_row.breakdown, dict) else {}
+    )
+
+    # Preferred shape from ML output.
+    existing = breakdown.get("skill_match")
+    if isinstance(existing, dict):
+        normalized = {}
+        for k, v in existing.items():
+            try:
+                normalized[str(k)] = float(v)
+            except (TypeError, ValueError):
+                continue
+        if normalized:
+            return normalized
+
+    # Fallback 1: derive from explicit matched/missing skills.
+    matched = breakdown.get("matched_skills")
+    missing = breakdown.get("missing_skills")
+    if isinstance(matched, list):
+        derived: Dict[str, float] = {}
+        for skill in matched:
+            key = str(skill).strip().lower()
+            if key:
+                derived[key] = 100.0
+        if isinstance(missing, list):
+            for skill in missing:
+                key = str(skill).strip().lower()
+                if key and key not in derived:
+                    derived[key] = 0.0
+        if derived:
+            return derived
+
+    # Fallback 2: derive from score components.
+    mapping = {
+        "skill": getattr(score_row, "skill_score", None),
+        "experience": getattr(score_row, "experience_score", None),
+        "education": getattr(score_row, "education_score", None),
+    }
+    return {
+        k: float(v)
+        for k, v in mapping.items()
+        if isinstance(v, (int, float))
+    }
+
+
+def _derive_recommendations(feedback: Optional[Feedback], improvements: List[str]) -> str:
+    text = (feedback.feedback_text or "").strip() if feedback else ""
+    if text:
+        return text
+
+    if improvements:
+        return "Consider improving: " + "; ".join(improvements[:3])
+
+    return "No additional recommendations available yet."
 
 class CandidateCreateRequest(BaseModel):
     name: Optional[str] = None
@@ -117,17 +214,12 @@ async def create_candidate(
         db.refresh(candidate)
 
         return {
-            "success": True,
-            "message": "Candidate record created successfully",
-            "data": {
-                "id": candidate.id,
-                "name": candidate.name,
-                "email": candidate.email,
-                "file_name": candidate.file_name,
-                "file_url": candidate.file_url,
-                "status": candidate.status,
-                "created_at": candidate.created_at.isoformat() if candidate.created_at else None
-            }
+            "id": candidate.id,
+            "name": candidate.name,
+            "email": candidate.email,
+            "file_id": candidate.file_name,
+            "status": _status_str(candidate),
+            "created_at": _iso_z(candidate.created_at),
         }
     except HTTPException:
         raise
@@ -147,28 +239,18 @@ async def list_candidates(
     if status:
         query = query.filter(Candidate.status == status)
     
-    total = query.count()
     candidates = query.offset(skip).limit(limit).all()
-    
-    return {
-        "success": True,
-        "data": {
-            "items": [
-                {
-                    "id": c.id,
-                    "name": c.name,
-                    "email": c.email,
-                    "status": c.status,
-                    "file_name": c.file_name,
-                    "created_at": c.created_at.isoformat() if c.created_at else None
-                }
-                for c in candidates
-            ],
-            "total": total,
-            "skip": skip,
-            "limit": limit
+
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "email": c.email,
+            "status": _status_str(c),
+            "created_at": _iso_z(c.created_at),
         }
-    }
+        for c in candidates
+    ]
 
 @router.post("/{candidate_id}/process")
 async def process_candidate(
@@ -268,30 +350,19 @@ async def get_candidate_feedback_alias(
             "score": score_row.overall_score if score_row else None,
             "strengths": [],
             "improvements": [],
-            "skill_match": {},
-            "recommendations": "",
+            "skill_match": _skill_match_contract(_derive_skill_match(score_row)),
+            "recommendations": "No feedback generated yet.",
         }
-
-    def _to_list(val):
-        if val is None:
-            return []
-        if isinstance(val, list):
-            return val
-        if isinstance(val, str):
-            parts = [p.strip() for p in val.split(",")]
-            return [p for p in parts if p]
-        return [str(val)]
-
-    breakdown = score_row.breakdown if score_row and isinstance(score_row.breakdown, dict) else {}
-    skill_match = breakdown.get("skill_match") if isinstance(breakdown.get("skill_match"), dict) else {}
+    strengths = _to_list(feedback.strengths)
+    improvements = _to_list(feedback.improvements)
 
     return {
         "candidate_id": candidate_id,
         "score": score_row.overall_score if score_row else None,
-        "strengths": _to_list(feedback.strengths),
-        "improvements": _to_list(feedback.improvements),
-        "skill_match": skill_match,
-        "recommendations": feedback.feedback_text or "",
+        "strengths": strengths,
+        "improvements": improvements,
+        "skill_match": _skill_match_contract(_derive_skill_match(score_row)),
+        "recommendations": _derive_recommendations(feedback, improvements),
     }
 
 
@@ -306,22 +377,19 @@ async def get_candidate(
         raise HTTPException(status_code=404, detail="Candidate not found")
     
     return {
-        "success": True,
-        "data": {
-            "id": candidate.id,
-            "name": candidate.name,
-            "email": candidate.email,
-            "phone": candidate.phone,
-            "file_name": candidate.file_name,
-            "file_url": candidate.file_url,
-            "file_size": candidate.file_size,
-            "file_type": candidate.file_type,
-            "status": candidate.status,
-            "parsed_data": candidate.parsed_data,
-            "error_message": candidate.error_message,
-            "created_at": candidate.created_at.isoformat() if candidate.created_at else None,
-            "updated_at": candidate.updated_at.isoformat() if candidate.updated_at else None
-        }
+        "id": candidate.id,
+        "name": candidate.name,
+        "email": candidate.email,
+        "file_id": candidate.file_name,
+        "status": _status_str(candidate),
+        "created_at": _iso_z(candidate.created_at),
+        "phone": candidate.phone,
+        "file_url": candidate.file_url,
+        "file_size": candidate.file_size,
+        "file_type": candidate.file_type,
+        "parsed_data": candidate.parsed_data,
+        "error_message": candidate.error_message,
+        "updated_at": _iso_z(candidate.updated_at),
     }
 
 @router.delete("/{candidate_id}")
