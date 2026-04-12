@@ -1,8 +1,5 @@
 # ml_service.py - FINAL COMPLETE VERSION
-# - Correct project count (3 real projects)
-# - Clean certifications (no languages)
-# - All three languages extracted
-# - Dynamic weights, fairness, bias detection, Gemini, candidate report
+
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
