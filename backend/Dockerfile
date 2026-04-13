@@ -25,4 +25,4 @@ ENV PORT=8080
 
 # Run the FastAPI app
 # main.py is inside the "app" folder, so module path is "app.main"
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD [CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT]
