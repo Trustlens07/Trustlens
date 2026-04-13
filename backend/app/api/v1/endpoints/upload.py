@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Backgro
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import timezone
+import asyncio
 from app.core.database import get_db
 from app.services.storage_service import storage_service
 from app.services.ml_client import ml_client
@@ -55,11 +56,14 @@ async def upload_resume(
         db.commit()
         db.refresh(candidate)
         
-        # Process in background
-        background_tasks.add_task(
-            UploadOrchestrator.process_resume,
-            candidate.id,
-            storage_result["file_url"]
+        # Process in background.
+        # NOTE: UploadOrchestrator.process_resume is async, and Starlette BackgroundTasks
+        # does not await async callables. Schedule it explicitly.
+        asyncio.create_task(
+            UploadOrchestrator.process_resume(
+                candidate.id,
+                storage_result["file_url"],
+            )
         )
         
         uploaded_at = candidate.created_at
@@ -130,11 +134,12 @@ async def batch_upload(
                 "file_name": storage_result["original_name"]
             })
             
-            # Process in background
-            background_tasks.add_task(
-                UploadOrchestrator.process_resume,
-                candidate.id,
-                storage_result["file_url"]
+            # Process in background (see note in single upload).
+            asyncio.create_task(
+                UploadOrchestrator.process_resume(
+                    candidate.id,
+                    storage_result["file_url"],
+                )
             )
             
         except Exception as e:
@@ -151,3 +156,4 @@ async def batch_upload(
             "failed": failed_uploads
         }
     }
+    

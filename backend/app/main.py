@@ -1,5 +1,4 @@
 from pathlib import Path
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -11,6 +10,17 @@ from app.core.logging import setup_logging
 from app.api.v1.router import api_router
 from app.middlewares.error_handler import add_exception_handlers
 from app.middlewares.request_logger import RequestLoggerMiddleware
+import firebase_admin
+from firebase_admin import credentials
+import os
+
+# --- Firebase Initialization (keep only once) ---
+cred_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY_PATH")
+if not cred_path:
+    raise ValueError("FIREBASE_SERVICE_ACCOUNT_KEY_PATH environment variable not set.")
+
+cred = credentials.Certificate(cred_path)
+firebase_admin.initialize_app(cred)
 
 # Setup logging
 setup_logging()
@@ -24,7 +34,7 @@ app = FastAPI(
     redoc_url=None
 )
 
-# Add middlewares
+# Middlewares
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -35,17 +45,20 @@ app.add_middleware(
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 app.add_middleware(RequestLoggerMiddleware)
 
-# Add exception handlers
+# Exception handlers
 add_exception_handlers(app)
 
-# Self-hosted ReDoc bundle (avoids blank page when CDN is blocked or flaky).
+# Static files for ReDoc
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 _STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
-# Include API router (versioned + verification alias without /v1)
+# Include API router (only once, prefix /api/v1)
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
-app.include_router(api_router, prefix="/api")
+
+# Optional: keep a simple /api alias for convenience (but may cause duplication)
+# Better to remove the second include. If you really need both, use redirect.
+# For now, I recommend removing: app.include_router(api_router, prefix="/api")
 
 @app.get("/")
 async def root():
@@ -67,7 +80,6 @@ async def health_check():
 
 @app.get("/ready")
 async def readiness_check():
-    # Check database connection
     try:
         from app.core.database import SessionLocal
         db = SessionLocal()
@@ -76,7 +88,6 @@ async def readiness_check():
         return {"status": "ready", "database": "connected"}
     except Exception as e:
         return {"status": "not ready"}
-
 
 @app.get("/redoc", include_in_schema=False)
 async def custom_redoc_html():

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Literal
 from pydantic import BaseModel
 from app.core.database import get_db
 from app.models.bias_metric import BiasMetric
+from app.models.candidate import Candidate
 from app.services.ml_client import ml_client
 import logging
 from datetime import timezone
@@ -193,12 +194,100 @@ def _bias_metrics_group_breakdown(db: Session, dimension_label: str) -> Dict[str
 async def get_bias_metrics(
     group_type: Optional[str] = Query(None, description="Filter by group type (gender, ethnicity, etc.)"),
     group: Optional[str] = Query(None, description="Alias of group_type for backward compatibility"),
+    candidate_id: Optional[str] = Query(None, description="Filter by candidate ID"),
+    version: Optional[Literal["original", "enhanced"]] = Query("original", description="Bias metrics version: 'original' or 'enhanced'"),
     db: Session = Depends(get_db)
 ):
-    """Get latest bias metrics: overall snapshot, or grouped breakdown for ?group=gender."""
+    """
+    Get latest bias metrics: overall snapshot, or grouped breakdown for ?group=gender.
+
+    Args:
+        group_type: Filter by group type (gender, ethnicity, etc.)
+        group: Alias of group_type for backward compatibility
+        candidate_id: Filter by specific candidate ID
+        version: 'original' (default) or 'enhanced' for Gemini-enhanced bias analysis
+
+    Returns:
+        Bias metrics data. For version='enhanced', returns enhanced data if exists, else 404.
+    """
+    # If candidate_id provided, check candidate exists
+    if candidate_id:
+        candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Handle enhanced version request
+    if version == "enhanced":
+        if not candidate_id:
+            raise HTTPException(status_code=400, detail="candidate_id required for version='enhanced'")
+
+        # Query for enhanced bias metrics
+        enhanced_metrics = db.query(BiasMetric).filter(
+            BiasMetric.candidate_id == candidate_id,
+            BiasMetric.is_enhanced == "yes"
+        ).order_by(BiasMetric.bias_enhanced_at.desc()).first()
+
+        if not enhanced_metrics:
+            raise HTTPException(
+                status_code=404,
+                detail="Enhanced bias metrics not found. Run enhancement first via POST /candidates/{id}/enhance"
+            )
+
+        return {
+            "success": True,
+            "data": {
+                "version": "enhanced",
+                "candidate_id": candidate_id,
+                "enhanced_bias_metrics": enhanced_metrics.enhanced_bias_metrics,
+                "bias_enhanced_at": enhanced_metrics.bias_enhanced_at.isoformat() if enhanced_metrics.bias_enhanced_at else None,
+                "metric_name": enhanced_metrics.metric_name,
+                "group_type": enhanced_metrics.group_type,
+                "group_name": enhanced_metrics.group_name,
+                "metric_value": enhanced_metrics.metric_value,
+                "is_biased": enhanced_metrics.is_biased
+            }
+        }
+
+    # Original version (default behavior)
     raw = (group_type or group or "").strip()
     raw_lower = raw.lower()
 
+    # If candidate_id provided without version, filter by candidate's original metrics
+    if candidate_id:
+        base_query = db.query(BiasMetric).filter(
+            BiasMetric.candidate_id == candidate_id,
+            BiasMetric.is_enhanced == "no"
+        )
+        latest = base_query.order_by(BiasMetric.calculated_at.desc()).first()
+        if latest and latest.calculated_at:
+            latest_at = latest.calculated_at
+            rows = base_query.filter(BiasMetric.calculated_at == latest_at).all()
+            return {
+                "success": True,
+                "data": {
+                    "version": "original",
+                    "candidate_id": candidate_id,
+                    "metrics": [
+                        {
+                            "metric_name": r.metric_name,
+                            "group_type": r.group_type,
+                            "group_name": r.group_name,
+                            "metric_value": r.metric_value,
+                            "is_biased": r.is_biased,
+                            "details": r.details,
+                            "calculated_at": r.calculated_at.isoformat() if r.calculated_at else None
+                        }
+                        for r in rows
+                    ]
+                }
+            }
+        return {
+            "success": True,
+            "data": {"version": "original", "candidate_id": candidate_id, "metrics": []},
+            "message": "No bias metrics found for candidate"
+        }
+
+    # Original global metrics behavior
     if raw_lower and raw_lower != "overall":
         return _bias_metrics_group_breakdown(db, dimension_label=raw_lower)
 

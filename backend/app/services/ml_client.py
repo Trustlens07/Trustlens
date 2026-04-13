@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 class MLClient:
     def __init__(self):
         self.timeout = 90.0
-        self.client = httpx.Client(timeout=self.timeout)
+        # Use AsyncClient for async methods (prevents blocking)
+        self.client = httpx.AsyncClient(timeout=self.timeout)
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def parse_resume(self, file_url: str) -> Dict[str, Any]:
@@ -41,13 +42,15 @@ class MLClient:
                     except Exception:
                         continue
 
-            file_resp = self.client.get(signed_url)
+            # Use async client for GET
+            file_resp = await self.client.get(signed_url)
             file_resp.raise_for_status()
             file_bytes = file_resp.content
             filename = parsed.path.rsplit("/", 1)[-1] or "resume"
             content_type = file_resp.headers.get("content-type") or "application/octet-stream"
 
-            response = self.client.post(
+            # POST with files (multipart)
+            response = await self.client.post(
                 f"{settings.ML_PARSING_SERVICE_URL}/parse",
                 files={"file": (filename, file_bytes, content_type)},
             )
@@ -59,27 +62,84 @@ class MLClient:
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def score_resume(self, parsed_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Call ML scoring service"""
+        """Call ML scoring service with correct resume.file_name field."""
         try:
-            # ML expects { required_skills, resume }
-            skills = parsed_data.get("skills") or []
+            # Extract the actual resume data (sometimes wrapped under 'parsed_data')
+            inner_data = parsed_data.get("parsed_data", parsed_data)
+            
+            # Extract file_name – try multiple possible locations
+            file_name = (
+                inner_data.get("file_name") or
+                parsed_data.get("file_name") or
+                "resume.pdf"
+            )
+            
+            # Extract required skills (list of skill names)
+            skills = inner_data.get("skills") or []
             required_skills = [s.get("name") for s in skills if isinstance(s, dict) and s.get("name")]
-            response = self.client.post(
+            
+            # Extract resume text (if available, otherwise empty string)
+            resume_text = (
+                inner_data.get("text_preview") or
+                inner_data.get("text") or
+                parsed_data.get("text_preview", "")
+            )
+            
+            # Build payload exactly as ML service expects
+            payload = {
+                "required_skills": required_skills,
+                "resume": {
+                    "file_name": file_name,
+                    "text": resume_text,
+                    "parsed_data": inner_data   # full parsed content
+                }
+            }
+            
+            logger.info(f"Sending scoring request for file: {file_name}")
+            response = await self.client.post(
                 f"{settings.ML_SCORING_SERVICE_URL}/score",
-                json={"required_skills": required_skills, "resume": parsed_data},
+                json=payload,
+            )
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"Scoring successful for {file_name}")
+            return result
+        except Exception as e:
+            logger.error(f"ML scoring failed: {str(e)}")
+            raise
+    
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def enhance_resume(
+        self,
+        resume_text: str,
+        original_score: float,
+        original_breakdown: Dict[str, Any],
+        original_bias_metrics: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Call ML enhance service to get Gemini-enhanced score."""
+        try:
+            payload = {
+                "resume_text": resume_text,
+                "original_score": original_score,
+                "original_breakdown": original_breakdown,
+                "original_bias_metrics": original_bias_metrics or {}
+            }
+            response = await self.client.post(
+                f"{settings.ML_ENHANCE_SERVICE_URL}/enhance",
+                json=payload,
+                timeout=20.0
             )
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"ML scoring failed: {str(e)}")
+            logger.error(f"ML enhance service failed: {str(e)}")
             raise
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def analyze_bias(self, candidates_data: list, scores: list[float]) -> Dict[str, Any]:
         """Call ML bias analysis service"""
         try:
-            response = self.client.post(
-                # ML service exposes POST /bias/detect
+            response = await self.client.post(
                 f"{settings.ML_BIAS_SERVICE_URL}/bias/detect",
                 json={"candidates_data": candidates_data, "scores": scores}
             )
@@ -93,8 +153,7 @@ class MLClient:
     async def generate_feedback(self, score_data: Dict[str, Any], parsed_data: Dict[str, Any]) -> str:
         """Call ML feedback service"""
         try:
-            response = self.client.post(
-                # Some deployments don't expose a feedback endpoint. If absent, treat as optional.
+            response = await self.client.post(
                 f"{settings.ML_FEEDBACK_SERVICE_URL}/generate",
                 json={
                     "score_data": score_data,
@@ -111,5 +170,10 @@ class MLClient:
         except Exception as e:
             logger.error(f"ML feedback generation failed: {str(e)}")
             raise
+    
+    async def close(self):
+        """Close the HTTP client gracefully."""
+        await self.client.aclose()
 
+# Singleton instance
 ml_client = MLClient()

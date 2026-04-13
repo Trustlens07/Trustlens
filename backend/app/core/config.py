@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     ML_SCORING_SERVICE_URL: str = os.getenv("ML_SCORING_SERVICE_URL", "http://localhost:8002")
     ML_BIAS_SERVICE_URL: str = os.getenv("ML_BIAS_SERVICE_URL", "http://localhost:8003")
     ML_FEEDBACK_SERVICE_URL: str = os.getenv("ML_FEEDBACK_SERVICE_URL", "http://localhost:8004")
+    ML_ENHANCE_SERVICE_URL: str = os.getenv("ML_ENHANCE_SERVICE_URL", "http://localhost:8005")
     
     # API Configuration
     CORS_ORIGINS: List[str] = [
