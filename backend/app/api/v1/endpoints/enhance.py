@@ -109,25 +109,28 @@ async def enhance_candidate_score(
         }
 
     try:
-        # Call ML service for enhancement
-        logger.info(f"Calling ML enhance service for candidate: {candidate_id}")
+        # Call ML scoring service with mode="enhanced" for enhancement
+        logger.info(f"Calling ML scoring service with mode=enhanced for candidate: {candidate_id}")
 
-        enhance_result = await ml_client.enhance_resume(
-            resume_text=resume_text,
-            original_score=original_score.overall_score,
-            original_breakdown=original_score.breakdown,
-            original_bias_metrics=original_bias_metrics
+        # Use candidate's parsed_data for scoring with enhanced mode
+        parsed_data_for_enhance = candidate.parsed_data if candidate.parsed_data else {}
+        
+        enhance_result = await ml_client.score_resume(
+            parsed_data=parsed_data_for_enhance,
+            mode="enhanced"
         )
+        
+        logger.info(f"Enhance result: score={enhance_result.get('overall_score')}, fairness={enhance_result.get('fairness_applied')}")
 
         # Store enhanced results in the score record
-        enhanced_score_value = float(enhance_result["enhanced_score"])
-        enhanced_breakdown = enhance_result["enhanced_breakdown"]
+        enhanced_score_value = float(enhance_result.get("overall_score", original_score.overall_score))
+        enhanced_breakdown = enhance_result.get("breakdown", original_score.breakdown)
 
         original_score.enhanced_score = enhanced_score_value
         original_score.enhanced_breakdown = enhanced_breakdown
         original_score.enhanced_at = datetime.now(timezone.utc)
         original_score.enhancement_explanation = enhance_result.get("explanation", "")
-        original_score.bias_correction_applied = enhance_result.get("bias_correction_applied", "")
+        original_score.bias_correction_applied = "Gemini AI" if enhance_result.get("fairness_applied") else "None"
 
         # Re-run bias analysis on enhanced scores
         enhanced_bias_metrics = None
@@ -193,10 +196,11 @@ async def enhance_candidate_score(
                 "enhanced_score": enhanced_score_value,
                 "enhanced_breakdown": enhanced_breakdown,
                 "explanation": enhance_result.get("explanation", ""),
-                "bias_correction_applied": enhance_result.get("bias_correction_applied", ""),
+                "bias_correction_applied": "Gemini fairness applied" if enhance_result.get("fairness_applied") else "None",
                 "bias_metrics": enhanced_bias_metrics,
                 "original_score": original_score.overall_score,
-                "enhanced_at": original_score.enhanced_at.isoformat() if original_score.enhanced_at else None
+                "enhanced_at": original_score.enhanced_at.isoformat() if original_score.enhanced_at else None,
+                "mode": "enhanced"
             }
         }
 

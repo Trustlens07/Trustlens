@@ -14,13 +14,33 @@ import firebase_admin
 from firebase_admin import credentials
 import os
 
-# --- Firebase Initialization (keep only once) ---
-cred_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY_PATH")
-if not cred_path:
-    raise ValueError("FIREBASE_SERVICE_ACCOUNT_KEY_PATH environment variable not set.")
 
-cred = credentials.Certificate(cred_path)
-firebase_admin.initialize_app(cred)
+# --- Firebase Initialization (Cloud Run compatible) ---
+import json
+
+if not firebase_admin._apps:
+    firebase_key_json = os.environ.get("FIREBASE_KEY")
+    if firebase_key_json:
+        try:
+            cred_dict = json.loads(firebase_key_json)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            print("Firebase initialized from Secret Manager (FIREBASE_KEY)")
+        except Exception as e:
+            print(f"Failed to initialize Firebase from FIREBASE_KEY: {e}")
+            raise
+    else:
+        # Fallback for local development (optional)
+        cred_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY_PATH")
+        if cred_path and os.path.exists(cred_path):
+            cred = credentials.Certificate(cred_path)
+            firebase_admin.initialize_app(cred)
+            print("⚠️ Firebase initialized from local file (development)")
+        else:
+            raise ValueError(
+                "Firebase credentials not provided. Set FIREBASE_KEY (JSON string) "
+                "for Cloud Run or FIREBASE_SERVICE_ACCOUNT_KEY_PATH (file path) for local dev."
+            )
 
 # Setup logging
 setup_logging()

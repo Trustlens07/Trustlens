@@ -61,7 +61,7 @@ class MLClient:
             raise
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-    async def score_resume(self, parsed_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def score_resume(self, parsed_data: Dict[str, Any], mode: str = "baseline") -> Dict[str, Any]:
         """Call ML scoring service with correct resume.file_name field."""
         try:
             # Extract the actual resume data (sometimes wrapped under 'parsed_data')
@@ -92,18 +92,29 @@ class MLClient:
                     "file_name": file_name,
                     "text": resume_text,
                     "parsed_data": inner_data   # full parsed content
-                }
+                },
+                "mode": mode  # "baseline" or "enhanced"
             }
             
-            logger.info(f"Sending scoring request for file: {file_name}")
+            logger.info(f"Sending scoring request for file: {file_name} with mode: {mode}")
             response = await self.client.post(
                 f"{settings.ML_SCORING_SERVICE_URL}/score",
                 json=payload,
             )
             response.raise_for_status()
             result = response.json()
-            logger.info(f"Scoring successful for {file_name}")
-            return result
+            logger.info(f"Scoring successful for {file_name}, mode={mode}, score={result.get('score')}")
+            
+            # Parse ML response to standard format
+            return {
+                "overall_score": result.get("score", 0.0),
+                "breakdown": result.get("components", {}),
+                "explanation": result.get("short_explanation", ""),
+                "fairness_applied": result.get("fairness_applied", False),
+                "matched_skills": result.get("matched_skills", []),
+                "missing_skills": result.get("missing_skills", []),
+                "mode": result.get("mode", mode)
+            }
         except Exception as e:
             logger.error(f"ML scoring failed: {str(e)}")
             raise
@@ -116,21 +127,35 @@ class MLClient:
         original_breakdown: Dict[str, Any],
         original_bias_metrics: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Call ML enhance service to get Gemini-enhanced score."""
+        """Call ML scoring service with mode='enhanced' to get Gemini-enhanced score."""
         try:
+            # Use the same payload format as score_resume but with mode='enhanced'
             payload = {
-                "resume_text": resume_text,
+                "required_skills": [],
+                "resume": {
+                    "file_name": "enhanced_resume.txt",
+                    "text": resume_text,
+                    "parsed_data": {}
+                },
+                "mode": "enhanced",
                 "original_score": original_score,
-                "original_breakdown": original_breakdown,
-                "original_bias_metrics": original_bias_metrics or {}
+                "original_breakdown": original_breakdown
             }
             response = await self.client.post(
-                f"{settings.ML_ENHANCE_SERVICE_URL}/enhance",
+                f"{settings.ML_SCORING_SERVICE_URL}/score",
                 json=payload,
-                timeout=20.0
+                timeout=60.0
             )
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            
+            # Transform the response to match expected enhance format
+            return {
+                "enhanced_score": result.get("overall_score", original_score),
+                "enhanced_breakdown": result.get("breakdown", original_breakdown),
+                "explanation": result.get("explanation", ""),
+                "bias_correction_applied": result.get("bias_correction_applied", "")
+            }
         except Exception as e:
             logger.error(f"ML enhance service failed: {str(e)}")
             raise
