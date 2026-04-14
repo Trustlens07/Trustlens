@@ -13,7 +13,7 @@ steps:
       - 'push'
       - 'us-central1-docker.pkg.dev/trustlens-493209/backend-repo/backend-image:$SHORT_SHA'
 
-  # 3. Deploy to Cloud Run (with environment variables)
+  # 3. Deploy the new image to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
     args:
@@ -26,5 +26,10 @@ steps:
       - '--allow-unauthenticated'
       - '--set-env-vars=HF_API_KEY=${_HF_API_KEY},DATABASE_URL=${_DATABASE_URL}'
 
+# Store the image in Artifact Registry
 images:
   - 'us-central1-docker.pkg.dev/trustlens-493209/backend-repo/backend-image:$SHORT_SHA'
+
+# [!] THIS IS THE NEW SECTION TO ADD
+options:
+  logging: CLOUD_LOGGING_ONLY
