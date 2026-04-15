@@ -1,6 +1,6 @@
 ---
 title: ML Resume Service
-emoji: 🚀
+
 colorFrom: blue
 colorTo: purple
 sdk: docker
