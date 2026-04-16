@@ -27,4 +27,4 @@ COPY backend/ .
 ENV PORT=8000
 
 # Run FastAPI app with workers and proxy headers
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2 --proxy-headers"]
+CMD ["python","run.py"]
