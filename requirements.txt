@@ -16,6 +16,7 @@ aiofiles==23.2.1
 # Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+firebase-admin==6.4.0
 
 # Utils and HTTP client
 pydantic[email]>=2.11.7
@@ -32,6 +33,8 @@ pdfplumber==0.10.3
 pytesseract==0.3.10
 pdf2image==1.16.3
 Pillow==10.1.0
+numpy>=1.24.0,<2.0.0
+pandas>=2.0.0,<3.0.0
 
 # Monitoring and logging
 prometheus-fastapi-instrumentator==6.1.0
