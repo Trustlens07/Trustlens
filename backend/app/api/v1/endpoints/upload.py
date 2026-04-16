@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 from datetime import timezone
 import asyncio
 from app.core.database import get_db
@@ -14,17 +14,23 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.post("/")
-@router.post("/resume")
+@router.post("")
 async def upload_resume(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     candidate_name: Optional[str] = None,
     candidate_email: Optional[str] = None,
+    required_skills: Optional[str] = Query(None, description="Comma-separated list of skills to match against"),
     db: Session = Depends(get_db)
 ):
     """
     Upload a resume file
+    
+    Args:
+        file: Resume PDF file
+        candidate_name: Candidate name
+        candidate_email: Candidate email
+        required_skills: Comma-separated skills (e.g., "Python,JavaScript,AWS")
     """
     try:
         # Validate file
@@ -41,6 +47,11 @@ async def upload_resume(
             content_type=content_type
         )
         
+        # Parse required_skills if provided
+        skills_list = None
+        if required_skills:
+            skills_list = [s.strip() for s in required_skills.split(",") if s.strip()]
+        
         # Create candidate record
         candidate = Candidate(
             name=candidate_name,
@@ -50,6 +61,7 @@ async def upload_resume(
             file_size=storage_result["file_size"],
             file_type=storage_result["file_type"],
             status=CandidateStatus.PENDING,
+            required_skills=skills_list,  # Store user-provided skills
         )
         
         db.add(candidate)
@@ -75,10 +87,12 @@ async def upload_resume(
             uploaded_at = None
         
         return {
+            "candidate_id": candidate.id,
             "file_id": storage_result["file_path"],
             "filename": storage_result["original_name"],
             "size_bytes": storage_result["file_size"],
             "storage_url": storage_result["file_url"],
+            "required_skills": skills_list,
             "uploaded_at": uploaded_at
         }
         

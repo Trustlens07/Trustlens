@@ -1,10 +1,11 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import upload, candidates, scores, bias, feedback, enhance
+from app.api.v1.endpoints import upload, candidates, scores, bias, feedback, enhance, screening
 from app.api.v1.endpoints import auth
 
 api_router = APIRouter()
 
 api_router.include_router(upload.router, prefix="/upload", tags=["Upload"])
+api_router.include_router(screening.router, prefix="/screening", tags=["Screening"])
 api_router.include_router(candidates.router, prefix="/candidates", tags=["Candidates"])
 api_router.include_router(enhance.router, prefix="/candidates", tags=["Enhancement"])
 api_router.include_router(scores.router, prefix="/scores", tags=["Scores"])

@@ -1,7 +1,19 @@
 from sqlalchemy.orm import Session
 import httpx
 import logging
+import io
+import pdfplumber
 from tenacity import RetryError
+
+# OCR imports
+try:
+    import pytesseract
+    from pdf2image import convert_from_bytes
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+    logger_temp = logging.getLogger(__name__)
+    logger_temp.warning("pytesseract/pdf2image not installed. OCR fallback disabled. Install with: pip install pytesseract pdf2image pillow")
 
 from app.core.database import SessionLocal
 from app.services.ml_client import ml_client
@@ -33,10 +45,83 @@ def _format_error(exc: BaseException) -> str:
         return f"HTTP request error: {e}"
     return str(e)
 
+def extract_text_from_pdf(file_bytes: bytes) -> str:
+    """Extract full text from PDF using pdfplumber, with OCR fallback for scanned PDFs.
+    
+    Flow:
+    1. Try pdfplumber (fast, for digital PDFs)
+    2. If < 50 chars extracted, try OCR with Tesseract (for scanned/image PDFs)
+    3. Return whatever text was extracted
+    """
+    text = ""
+    
+    try:
+        # Step 1: Try pdfplumber (works for searchable/digital PDFs)
+        logger.info("🔍 Attempting text extraction with pdfplumber...")
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                text += page_text
+        
+        extracted_length = len(text)
+        logger.info(f"✅ pdfplumber extracted {extracted_length} characters")
+        
+        # Step 2: If text is minimal, try OCR as fallback
+        if extracted_length < 50:
+            logger.warning(f"⚠️ Low text extraction ({extracted_length} chars) - attempting OCR fallback...")
+            
+            if not OCR_AVAILABLE:
+                logger.error("❌ OCR not available. Install: pip install pytesseract pdf2image pillow")
+                return text  # Return whatever pdfplumber got
+            
+            try:
+                logger.info("🔄 Converting PDF to images for OCR...")
+                images = convert_from_bytes(file_bytes, dpi=300)
+                logger.info(f"📄 Converted to {len(images)} image(s), running Tesseract OCR...")
+                
+                ocr_text = ""
+                for page_num, image in enumerate(images, 1):
+                    logger.info(f"🔤 OCR on page {page_num}/{len(images)}...")
+                    page_ocr_text = pytesseract.image_to_string(image, lang='eng')
+                    ocr_text += page_ocr_text
+                    if page_ocr_text.strip():
+                        logger.info(f"   ✓ Page {page_num}: {len(page_ocr_text)} chars extracted via OCR")
+                
+                ocr_length = len(ocr_text)
+                if ocr_length > extracted_length:
+                    logger.info(f"✅ OCR improved extraction: {extracted_length} → {ocr_length} characters")
+                    text = ocr_text
+                else:
+                    logger.info(f"⚠️ OCR didn't improve results. Keeping pdfplumber text ({extracted_length} chars)")
+                    
+            except Exception as ocr_error:
+                logger.error(f"❌ OCR failed: {ocr_error}. Continuing with pdfplumber extraction...")
+                # Continue with whatever pdfplumber extracted
+        
+        final_length = len(text)
+        logger.info(f"📊 Final extraction: {final_length} characters")
+        return text
+        
+    except Exception as e:
+        logger.error(f"❌ PDF extraction failed: {e}", exc_info=True)
+        return ""
+
 class UploadOrchestrator:
     @staticmethod
-    async def process_resume(candidate_id: str, file_url: str):
-        """Process resume after upload"""
+    async def process_resume(
+        candidate_id: str,
+        file_url: str,
+        job_role: str = None,
+        job_description: str = None,
+    ):
+        """Process resume after upload
+        
+        Args:
+            candidate_id: ID of the candidate
+            file_url: URL of the resume file
+            job_role: Optional job role for context-aware scoring
+            job_description: Optional job description for context-aware scoring
+        """
         db = SessionLocal()
         
         try:
@@ -55,11 +140,25 @@ class UploadOrchestrator:
             candidate.error_message = None
             db.commit()
             
+            # Step 0: Extract full text from PDF
+            logger.info(f"Extracting full text from PDF for candidate {candidate_id}")
+            async with httpx.AsyncClient() as client:
+                file_response = await client.get(file_url)
+                file_response.raise_for_status()
+                file_bytes = file_response.content
+                logger.info(f"Downloaded PDF size: {len(file_bytes)} bytes")
+                logger.info(f"First 200 bytes: {file_bytes[:200]}")
+                full_text = extract_text_from_pdf(file_bytes)
+                logger.info(f"Extracted {len(full_text)} characters from PDF")
+
             # Step 1: Parse resume
             logger.info(f"Parsing resume for candidate {candidate_id}")
             parsed_data = await ml_client.parse_resume(file_url)
-            
-            # Update candidate with parsed data
+            logger.info(f"📄 Parse response keys: {list(parsed_data.keys())}")
+
+            # Update candidate with parsed data and full text
+            logger.info(f"📝 Adding full_text ({len(full_text)} chars) to parsed_data")
+            parsed_data["full_text"] = full_text
             candidate.parsed_data = parsed_data
             candidate.name = parsed_data.get("name", candidate.name)
             candidate.email = parsed_data.get("email", candidate.email)
@@ -68,15 +167,20 @@ class UploadOrchestrator:
             
             # Step 2: Score resume
             logger.info(f"Scoring resume for candidate {candidate_id}")
-            score_data = await ml_client.score_resume(parsed_data)
-            
+            logger.info(f"📋 Candidate required_skills: {candidate.required_skills}")
+            # Use user-provided skills if available, otherwise ml_client will auto-extract
+            score_data = await ml_client.score_resume(
+                parsed_data, 
+                required_skills=candidate.required_skills
+            )
+
             # Save scores
-            # Map ML score response shape to DB model
-            components = score_data.get("components") or {}
-            overall_score = score_data.get("total_score", score_data.get("overall_score", 0.0))
-            skill_score = components.get("skill_score", components.get("skill", 0.0))
-            experience_score = components.get("experience_score", components.get("experience", 0.0))
-            education_score = components.get("education_score", components.get("education", 0.0))
+            # score_data now contains standardized keys: "overall_score" and "components"
+            overall_score = score_data.get("overall_score", 0.0)
+            components = score_data.get("components", {})
+            skill_score = components.get("skills", 0.0)
+            experience_score = components.get("experience", 0.0)
+            education_score = components.get("education", 0.0)
 
             score = Score(
                 candidate_id=candidate_id,
@@ -84,7 +188,7 @@ class UploadOrchestrator:
                 skill_score=skill_score,
                 experience_score=experience_score,
                 education_score=education_score,
-                breakdown=components if components else score_data,
+                breakdown=components,
             )
             db.add(score)
             

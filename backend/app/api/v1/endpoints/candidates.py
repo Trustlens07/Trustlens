@@ -388,8 +388,48 @@ async def get_candidate(
         "file_size": candidate.file_size,
         "file_type": candidate.file_type,
         "parsed_data": candidate.parsed_data,
+        "required_skills": candidate.required_skills,
         "error_message": candidate.error_message,
         "updated_at": _iso_z(candidate.updated_at),
+    }
+
+
+class UpdateSkillsRequest(BaseModel):
+    required_skills: List[str]
+
+
+@router.put("/{candidate_id}/skills")
+async def update_candidate_skills(
+    candidate_id: str,
+    request: UpdateSkillsRequest,
+    db: Session = Depends(get_db)
+):
+    """Update required skills for a candidate
+    
+    Args:
+        candidate_id: The candidate ID
+        required_skills: List of skills to match against the resume
+    
+    Example:
+        PUT /candidates/{id}/skills
+        {
+            "required_skills": ["Python", "JavaScript", "AWS"]
+        }
+    """
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    
+    # Update required skills
+    candidate.required_skills = request.required_skills
+    db.commit()
+    db.refresh(candidate)
+    
+    return {
+        "success": True,
+        "candidate_id": candidate.id,
+        "required_skills": candidate.required_skills,
+        "message": f"Updated {len(request.required_skills)} skills"
     }
 
 @router.delete("/{candidate_id}")

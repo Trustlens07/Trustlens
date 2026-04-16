@@ -9,25 +9,24 @@ logger = logging.getLogger(__name__)
 
 def _create_engine():
     if not settings.DATABASE_URL:
-        # Avoid crashing app import/startup when env is missing.
-        # Any DB-using endpoint will fail later with a clear message.
-        raise RuntimeError("DATABASE_URL is not set")
-    return create_engine(
-        settings.DATABASE_URL,
-        pool_pre_ping=True,  # Verify connections before using
-        pool_recycle=3600,   # Recycle connections after 1 hour
-        pool_size=10,        # Number of connections to keep in pool
-        max_overflow=20,     # Maximum overflow connections
-        echo=settings.DEBUG,  # Log SQL queries in debug mode
-    )
+        logger.error("DATABASE_URL is not set - database will not be available")
+        return None
+    try:
+        return create_engine(
+            settings.DATABASE_URL,
+            pool_pre_ping=True,  # Verify connections before using
+            pool_recycle=3600,   # Recycle connections after 1 hour
+            pool_size=10,        # Number of connections to keep in pool
+            max_overflow=20,     # Maximum overflow connections
+            echo=settings.DEBUG,  # Log SQL queries in debug mode
+        )
+    except Exception as e:
+        logger.error("Failed to create database engine: %s", str(e))
+        return None
 
 
-# Create database engine with connection pooling (best-effort, don't crash startup)
-try:
-    engine = _create_engine()
-except Exception as e:
-    engine = None
-    logger.error("Database engine init failed (startup continues): %s", str(e))
+# Create database engine with connection pooling
+engine = _create_engine()
 
 def _require_engine():
     if engine is None:

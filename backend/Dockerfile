@@ -23,8 +23,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy all backend code (inside 'backend/' folder of the context)
 COPY backend/ .
 
-# Cloud Run uses this port
+# Cloud Run uses PORT=8080 by default
 ENV PORT=8080
 
-# Run FastAPI app with workers and proxy headers
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2 --proxy-headers"]
+# Health check for Cloud Run
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Run FastAPI app
+# Use uvicorn to listen on 0.0.0.0 and the PORT env variable
+CMD exec uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers --timeout-keep-alive 65

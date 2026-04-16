@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     DEBUG: bool = ENVIRONMENT == "development"
     
+    # Port (Cloud Run uses PORT env var, defaults to 8000 for local dev)
+    PORT: int = int(os.getenv("PORT", 8000))
+    
     # Supabase
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")

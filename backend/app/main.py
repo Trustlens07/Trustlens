@@ -20,27 +20,35 @@ import json
 
 if not firebase_admin._apps:
     firebase_key_json = os.environ.get("FIREBASE_KEY")
+    cred_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY_PATH")
+    
+    firebase_initialized = False
+    
+    # Try to initialize from FIREBASE_KEY (Cloud Run)
     if firebase_key_json:
         try:
             cred_dict = json.loads(firebase_key_json)
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
-            print("Firebase initialized from Secret Manager (FIREBASE_KEY)")
+            print("✓ Firebase initialized from Secret Manager (FIREBASE_KEY)")
+            firebase_initialized = True
         except Exception as e:
-            print(f"Failed to initialize Firebase from FIREBASE_KEY: {e}")
-            raise
-    else:
-        # Fallback for local development (optional)
-        cred_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY_PATH")
-        if cred_path and os.path.exists(cred_path):
+            print(f"⚠️ Failed to initialize Firebase from FIREBASE_KEY: {e}")
+    
+    # Try to initialize from local file (local development)
+    if not firebase_initialized and cred_path and os.path.exists(cred_path):
+        try:
             cred = credentials.Certificate(cred_path)
             firebase_admin.initialize_app(cred)
-            print("⚠️ Firebase initialized from local file (development)")
-        else:
-            raise ValueError(
-                "Firebase credentials not provided. Set FIREBASE_KEY (JSON string) "
-                "for Cloud Run or FIREBASE_SERVICE_ACCOUNT_KEY_PATH (file path) for local dev."
-            )
+            print("✓ Firebase initialized from local file (development)")
+            firebase_initialized = True
+        except Exception as e:
+            print(f"⚠️ Failed to initialize Firebase from file: {e}")
+    
+    # Warning if Firebase is not initialized
+    if not firebase_initialized:
+        print("⚠️ WARNING: Firebase not initialized. Auth endpoints will fail.")
+        print("   Set FIREBASE_KEY (JSON string) or FIREBASE_SERVICE_ACCOUNT_KEY_PATH (file path)")
 
 # Setup logging
 setup_logging()
@@ -86,6 +94,22 @@ async def root():
         "message": f"Welcome to {settings.PROJECT_NAME} API",
         "version": settings.VERSION,
         "docs": "/docs"
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Cloud Run"""
+    from app.core.database import engine
+    
+    db_status = "connected" if engine else "disconnected"
+    firebase_status = "initialized" if firebase_admin._apps else "not_initialized"
+    
+    return {
+        "status": "healthy",
+        "database": db_status,
+        "firebase": firebase_status,
+        "version": settings.VERSION,
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 from datetime import datetime, timezone
