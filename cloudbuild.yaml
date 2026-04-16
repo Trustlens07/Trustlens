@@ -4,7 +4,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/trustlens-493209/backend-repo/backend-image:$SHORT_SHA'
+      - 'us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
       - '-f'
       - 'backend/Dockerfile'
       - '.'
@@ -13,7 +13,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/trustlens-493209/backend-repo/backend-image:$SHORT_SHA'
+      - 'us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
 
   # 3. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -22,17 +22,18 @@ steps:
       - 'run'
       - 'deploy'
       - 'resume-backend'
-      - '--image=us-central1-docker.pkg.dev/trustlens-493209/backend-repo/backend-image:$SHORT_SHA'
+      - '--image=us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
       - '--region=us-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--port=8080'
-      - '--memory=512Mi'
-      - '--set-env-vars=HF_API_KEY=${_HF_API_KEY},DATABASE_URL=${_DATABASE_URL}'
-      - '--set-secrets=FIREBASE_KEY=firebase-key:latest'
+      - '--memory=1Gi'
+      - '--timeout=3600'
+      - '--set-env-vars=ENVIRONMENT=production,DEBUG=False,DATABASE_URL=${_DATABASE_URL},SUPABASE_URL=${_SUPABASE_URL},SUPABASE_KEY=${_SUPABASE_KEY},SUPABASE_SERVICE_KEY=${_SUPABASE_SERVICE_KEY},ML_PARSING_SERVICE_URL=${_ML_PARSING_SERVICE_URL},ML_SCORING_SERVICE_URL=${_ML_SCORING_SERVICE_URL},ML_BIAS_SERVICE_URL=${_ML_BIAS_SERVICE_URL},ML_FEEDBACK_SERVICE_URL=${_ML_FEEDBACK_SERVICE_URL},ML_ENHANCE_SERVICE_URL=${_ML_ENHANCE_SERVICE_URL}'
+      - '--set-secrets=FIREBASE_KEY=firebase-service-account:latest'
 
 images:
-  - 'us-central1-docker.pkg.dev/trustlens-493209/backend-repo/backend-image:$SHORT_SHA'
+  - 'us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
 
 options:
   logging: CLOUD_LOGGING_ONLY
