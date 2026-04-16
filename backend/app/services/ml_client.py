@@ -302,6 +302,51 @@ class MLClient:
             logger.error(f"ML feedback generation failed: {str(e)}")
             raise
     
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def candidate_report(self, parsed_data: Dict[str, Any], required_skills: list, job_role: str = None) -> Dict[str, Any]:
+        """Call ML candidate report service to get detailed report.
+        
+        Args:
+            parsed_data: Parsed resume data from ML parser
+            required_skills: List of required skills to match against
+            job_role: Job role for context (optional)
+        
+        Returns:
+            Dict with overall_score, matched_skills, missing_skills, recommendations, explanation
+        """
+        try:
+            payload = {
+                "parsed_data": parsed_data,
+                "required_skills": required_skills or [],
+                "job_role": job_role or ""
+            }
+            
+            logger.info(f"📋 Generating candidate report with {len(required_skills or [])} skills for role: {job_role or 'N/A'}")
+            
+            response = await self.client.post(
+                f"{settings.ML_ENHANCE_SERVICE_URL}/candidate-report",
+                json=payload,
+                timeout=120.0  # Longer timeout for comprehensive report
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            logger.info(f"✅ Candidate report generated. Overall score: {result.get('overall_score')}")
+            
+            return {
+                "overall_score": result.get("overall_score", 0.0),
+                "matched_skills": result.get("matched_skills", []),
+                "missing_skills": result.get("missing_skills", []),
+                "recommendations": result.get("recommendations", []),
+                "explanation": result.get("explanation", ""),
+                "skill_match_percentage": result.get("skill_match_percentage", 0),
+                "experience_level": result.get("experience_level", ""),
+                "next_steps": result.get("next_steps", [])
+            }
+        except Exception as e:
+            logger.error(f"ML candidate report generation failed: {str(e)}")
+            raise
+    
     async def close(self):
         """Close the HTTP client gracefully."""
         await self.client.aclose()

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import timezone
 import asyncio
+import uuid
 from app.core.database import get_db
 from app.services.storage_service import storage_service
 from app.services.ml_client import ml_client
@@ -21,6 +22,7 @@ async def upload_resume(
     candidate_name: Optional[str] = None,
     candidate_email: Optional[str] = None,
     required_skills: Optional[str] = Query(None, description="Comma-separated list of skills to match against"),
+    job_role: Optional[str] = Query(None, description="Job role for candidate report"),
     db: Session = Depends(get_db)
 ):
     """
@@ -31,6 +33,7 @@ async def upload_resume(
         candidate_name: Candidate name
         candidate_email: Candidate email
         required_skills: Comma-separated skills (e.g., "Python,JavaScript,AWS")
+        job_role: Job role for candidate report (e.g., "Software Engineer")
     """
     try:
         # Validate file
@@ -52,6 +55,10 @@ async def upload_resume(
         if required_skills:
             skills_list = [s.strip() for s in required_skills.split(",") if s.strip()]
         
+        # Generate unique application_id (format: APP-XXXXX)
+        unique_suffix = str(uuid.uuid4())[:5].upper()
+        application_id = f"APP-{unique_suffix}"
+        
         # Create candidate record
         candidate = Candidate(
             name=candidate_name,
@@ -62,6 +69,8 @@ async def upload_resume(
             file_type=storage_result["file_type"],
             status=CandidateStatus.PENDING,
             required_skills=skills_list,  # Store user-provided skills
+            job_role=job_role,  # Store job role
+            application_id=application_id,  # Store unique app ID
         )
         
         db.add(candidate)
@@ -88,11 +97,13 @@ async def upload_resume(
         
         return {
             "candidate_id": candidate.id,
+            "application_id": application_id,
             "file_id": storage_result["file_path"],
             "filename": storage_result["original_name"],
             "size_bytes": storage_result["file_size"],
             "storage_url": storage_result["file_url"],
             "required_skills": skills_list,
+            "job_role": job_role,
             "uploaded_at": uploaded_at
         }
         
@@ -106,10 +117,15 @@ async def upload_resume(
 async def batch_upload(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
+    job_role: Optional[str] = Query(None, description="Job role for all candidates"),
     db: Session = Depends(get_db)
 ):
     """
     Upload multiple resume files
+    
+    Args:
+        files: List of resume PDF files
+        job_role: Optional job role for all candidates
     """
     uploaded_candidates = []
     failed_uploads = []
@@ -130,6 +146,10 @@ async def batch_upload(
                 content_type=content_type
             )
             
+            # Generate unique application_id
+            unique_suffix = str(uuid.uuid4())[:5].upper()
+            application_id = f"APP-{unique_suffix}"
+            
             # Create candidate record
             candidate = Candidate(
                 file_name=storage_result["file_path"],
@@ -137,6 +157,8 @@ async def batch_upload(
                 file_size=storage_result["file_size"],
                 file_type=storage_result["file_type"],
                 status=CandidateStatus.PENDING,
+                job_role=job_role,
+                application_id=application_id,
             )
             
             db.add(candidate)
@@ -145,7 +167,9 @@ async def batch_upload(
             
             uploaded_candidates.append({
                 "candidate_id": candidate.id,
-                "file_name": storage_result["original_name"]
+                "application_id": application_id,
+                "file_name": storage_result["original_name"],
+                "job_role": job_role
             })
             
             # Process in background (see note in single upload).
@@ -170,4 +194,3 @@ async def batch_upload(
             "failed": failed_uploads
         }
     }
-    
