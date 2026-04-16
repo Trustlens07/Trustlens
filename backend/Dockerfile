@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .
 
 # Cloud Run uses PORT=8080 by default
-ENV PORT=8080
+ENV PORT=8000
 
 # Health check for Cloud Run
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
