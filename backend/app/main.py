@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -13,9 +14,6 @@ from app.middlewares.request_logger import RequestLoggerMiddleware
 import firebase_admin
 from firebase_admin import credentials
 import os
-
-
-# --- Firebase Initialization (Cloud Run compatible) ---
 import json
 
 if not firebase_admin._apps:
@@ -103,23 +101,14 @@ async def health_check():
     
     db_status = "connected" if engine else "disconnected"
     firebase_status = "initialized" if firebase_admin._apps else "not_initialized"
+    now = datetime.now(timezone.utc)
     
     return {
         "status": "healthy",
         "database": db_status,
         "firebase": firebase_status,
         "version": settings.VERSION,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
-
-from datetime import datetime, timezone
-
-@app.get("/health")
-async def health_check():
-    now = datetime.now(timezone.utc)
-    return {
-        "status": "ok",
-        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp": now.isoformat()
     }
 
 @app.get("/ready")
