@@ -26,9 +26,9 @@ steps:
       - '--region=us-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
-      - '--port=8080'
+      - '--port=8000'
       - '--memory=512Mi'
-      - '--set-env-vars=HF_API_KEY=${_HF_API_KEY},DATABASE_URL=${_DATABASE_URL}'
+      - '--set-env-vars=HF_API_KEY=${_HF_API_KEY},DATABASE_URL=${_DATABASE_URL},SUPABASE_URL=${_SUPABASE_URL},SUPABASE_KEY=${_SUPABASE_KEY}'
       - '--set-secrets=FIREBASE_KEY=firebase-service-account:latest'
 
 images:
