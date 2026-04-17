@@ -25,13 +25,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ... (after your pip installs)
 COPY backend/ .
 
-<<<<<<< HEAD
-# Cloud Run uses PORT=8080 by default
-ENV PORT=8080
-=======
 # This ensures all your internal imports work
-ENV PYTHONPATH=. 
->>>>>>> a049d96a5ac6484910a136cc962ef4ffe77b1cf2
+ENV PYTHONPATH=.
 
 # Cloud Run injects $PORT (usually 8080), so we use that variable
 CMD exec uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
 import os
@@ -17,15 +17,15 @@ class Settings(BaseSettings):
     DEBUG: bool = ENVIRONMENT == "development"
     
     # Port (Cloud Run uses PORT env var, defaults to 8000 for local dev)
-    PORT: int = int(os.getenv("PORT", 8000))
+    PORT: int = int(os.getenv("PORT", "8080"))
     
-    # Supabase
-    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
-    SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
+    # Supabase – Optional
+    SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY: Optional[str] = os.getenv("SUPABASE_KEY")
+    SUPABASE_SERVICE_KEY: Optional[str] = os.getenv("SUPABASE_SERVICE_KEY")
     
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+    # Database – Optional
+    DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
     
     # Storage
     STORAGE_BUCKET_NAME: str = os.getenv("STORAGE_BUCKET_NAME", "resumes")
@@ -33,12 +33,12 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_FILE_TYPES: List[str] = [".pdf", ".doc", ".docx"]
     
-    # ML Services
-    ML_PARSING_SERVICE_URL: str = os.getenv("ML_PARSING_SERVICE_URL", "http://localhost:8001")
-    ML_SCORING_SERVICE_URL: str = os.getenv("ML_SCORING_SERVICE_URL", "http://localhost:8002")
-    ML_BIAS_SERVICE_URL: str = os.getenv("ML_BIAS_SERVICE_URL", "http://localhost:8003")
-    ML_FEEDBACK_SERVICE_URL: str = os.getenv("ML_FEEDBACK_SERVICE_URL", "http://localhost:8004")
-    ML_ENHANCE_SERVICE_URL: str = os.getenv("ML_ENHANCE_SERVICE_URL", "http://localhost:8005")
+    # ML Services – Optional
+    ML_PARSING_SERVICE_URL: Optional[str] = os.getenv("ML_PARSING_SERVICE_URL")
+    ML_SCORING_SERVICE_URL: Optional[str] = os.getenv("ML_SCORING_SERVICE_URL")
+    ML_BIAS_SERVICE_URL: Optional[str] = os.getenv("ML_BIAS_SERVICE_URL")
+    ML_FEEDBACK_SERVICE_URL: Optional[str] = os.getenv("ML_FEEDBACK_SERVICE_URL")
+    ML_ENHANCE_SERVICE_URL: Optional[str] = os.getenv("ML_ENHANCE_SERVICE_URL")
     
     # API Configuration
     CORS_ORIGINS: List[str] = [
