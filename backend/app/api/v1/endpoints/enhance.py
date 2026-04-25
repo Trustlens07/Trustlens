@@ -30,7 +30,7 @@ class EnhanceResponse(BaseModel):
 async def enhance_candidate_score(
     candidate_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)   # <-- new dependency
+    # current_user: dict = Depends(get_current_user)  # Temporarily disabled for frontend integration
 ):
     # ... rest of your function (unchanged) ...
     """
