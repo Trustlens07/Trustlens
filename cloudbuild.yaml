@@ -1,4 +1,5 @@
 steps:
+  # 1. Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -8,11 +9,13 @@ steps:
       - 'backend/Dockerfile'
       - '.'
 
+  # 2. Push the image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
       - 'us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
 
+  # 3. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
     args:
@@ -26,8 +29,9 @@ steps:
       - '--port=8080'
       - '--memory=1Gi'
       - '--timeout=3600'
-      - '--set-env-vars=ENVIRONMENT=production,DEBUG=False,DATABASE_URL=${_DATABASE_URL},HF_API_KEY=${_HF_API_KEY}'
+      - '--set-env-vars=ENVIRONMENT=production,DEBUG=False,DATABASE_URL=${_DATABASE_URL},HF_API_KEY=${_HF_API_KEY},SUPABASE_KEY=${_SUPABASE_KEY},SUPABASE_URL=${_SUPABASE_URL}'
       - '--set-secrets=FIREBASE_KEY=firebase-service-account:latest'
+
 images:
   - 'us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
 
