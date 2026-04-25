@@ -1,24 +1,36 @@
 steps:
-  # 1. Build the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/resume-backend', '.']
-  
-  # 2. Push the image to Artifact Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/resume-backend']
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
+      - '-f'
+      - 'backend/Dockerfile'
+      - '.'
 
-  # 3. Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
+
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
+    entrypoint: 'gcloud'
     args:
       - 'run'
       - 'deploy'
       - 'resume-backend'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/resume-backend'
-      - '--region'
-      - 'us-central1'
+      - '--image=us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
       - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--memory=1Gi'
+      - '--timeout=3600'
+      - '--set-env-vars=ENVIRONMENT=production,DEBUG=False,DATABASE_URL=${_DATABASE_URL},HF_API_KEY=${_HF_API_KEY}'
+      - '--set-secrets=FIREBASE_KEY=firebase-service-account:latest'
+
+images:
+  - 'us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
 
 options:
   logging: CLOUD_LOGGING_ONLY
