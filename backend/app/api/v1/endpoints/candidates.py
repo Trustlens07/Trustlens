@@ -47,7 +47,6 @@ def _extract_skills_from_parsed(parsed: dict) -> List[str]:
         if isinstance(val, list):
             for item in val:
                 if isinstance(item, dict):
-                    # Handle {"name": "python"} or {"name": "selenium,jira"} format
                     name = item.get("name", "")
                     if name:
                         skills.extend([s.strip() for s in name.split(",") if s.strip()])
@@ -66,7 +65,7 @@ def _extract_skills_from_parsed(parsed: dict) -> List[str]:
         if val:
             candidate_skills.extend(extract_from_val(val))
 
-    # Check nested parsed_data structure (your ML parser wraps data this way)
+    # Check nested parsed_data structure
     if not candidate_skills:
         inner = parsed.get("parsed_data", {})
         if isinstance(inner, dict):
@@ -77,29 +76,19 @@ def _extract_skills_from_parsed(parsed: dict) -> List[str]:
                     if candidate_skills:
                         break
 
-    # Deduplicate while preserving order
     return list(dict.fromkeys(candidate_skills))
 
 
 def _extract_skills_from_text(text: str, required_skills: List[str]) -> List[str]:
-    """
-    Job-role agnostic fallback: extract skills from raw resume text.
-    If required_skills are provided, check which ones appear in the text.
-    Otherwise, extract capitalized terms that look like tool/skill names.
-    """
+    """Job-role agnostic fallback: extract skills from raw resume text."""
     if not text:
         return []
 
-    # If we know what skills to look for, just scan the text for them
     if required_skills:
         text_lower = text.lower()
         return [skill for skill in required_skills if skill.lower() in text_lower]
 
-    # No required_skills — extract capitalized terms as potential skills
-    # Matches things like "Selenium", "TestComplete", "AWS", "CI/CD", "Node.js"
     matches = re.findall(r'\b[A-Z][a-zA-Z0-9+#./]*(?:\s[A-Z][a-zA-Z0-9+#./]*){0,2}\b', text)
-
-    # Filter out common non-skill words
     stopwords = {
         "With", "The", "This", "In", "At", "For", "And", "Or", "To", "Of", "By",
         "On", "From", "Is", "Are", "Was", "Has", "Have", "Been", "When", "Where",
@@ -126,25 +115,49 @@ def _get_full_text(parsed: dict) -> str:
 
 
 def _get_experience_years(parsed: dict):
-    """Extract total years of experience from parsed_data."""
+    """
+    Extract total years of experience from parsed_data.
+    Checks top-level first (set by upload_orchestrator after fixing),
+    then nested, then various field name aliases.
+    """
     if not isinstance(parsed, dict):
         return None
-    years = parsed.get("years_of_experience") or parsed.get("experience_years") or parsed.get("total_experience_years")
-    if not years:
-        inner = parsed.get("parsed_data", {})
-        if isinstance(inner, dict):
-            years = inner.get("years_of_experience") or inner.get("experience_years") or inner.get("total_experience_years")
-    return years
+
+    # Check top-level first — upload_orchestrator sets this correctly
+    for field in ["total_experience_years", "years_of_experience", "experience_years"]:
+        val = parsed.get(field)
+        if val is not None:
+            try:
+                fval = float(val)
+                if fval > 0:
+                    return fval
+            except (ValueError, TypeError):
+                continue
+
+    # Check nested parsed_data (older format)
+    inner = parsed.get("parsed_data", {})
+    if isinstance(inner, dict):
+        for field in ["total_experience_years", "years_of_experience", "experience_years"]:
+            val = inner.get(field)
+            if val is not None:
+                try:
+                    fval = float(val)
+                    if fval > 0:
+                        return fval
+                except (ValueError, TypeError):
+                    continue
+
+    return None
 
 
 def _generate_basic_report(candidate: Candidate, required_skills: list) -> Dict[str, Any]:
     """
     Generate a basic report when ML service is not available.
-    Job-role agnostic — works for any domain (QA, engineering, design, finance, etc.)
+    Job-role agnostic — works for any domain.
     
-    Args:
-        candidate: The candidate model
-        required_skills: List of required skills for matching
+    Note: overall_score here is SKILL MATCH PERCENTAGE, not the pretrained score.
+    The pretrained score (from /score endpoint) is stored separately in Score table
+    and shown via /status endpoint.
     """
     parsed = candidate.parsed_data or {}
     status = candidate.status.value if isinstance(candidate.status, CandidateStatus) else str(candidate.status)
@@ -152,12 +165,12 @@ def _generate_basic_report(candidate: Candidate, required_skills: list) -> Dict[
     # Step 1: Extract skills from structured parsed_data
     candidate_skills = _extract_skills_from_parsed(parsed)
 
-    # Step 2: If no structured skills found, fall back to text extraction
+    # Step 2: Fallback to text extraction if no structured skills
     if not candidate_skills:
         full_text = _get_full_text(parsed)
         candidate_skills = _extract_skills_from_text(full_text, required_skills)
         if candidate_skills:
-            logger.info(f"Skills extracted from resume text for candidate {candidate.id}: {candidate_skills}")
+            logger.info(f"Skills extracted from text for candidate {candidate.id}: {candidate_skills}")
         else:
             logger.warning(f"No skills could be extracted for candidate {candidate.id}")
 
@@ -169,7 +182,7 @@ def _generate_basic_report(candidate: Candidate, required_skills: list) -> Dict[
         matched = [s for s in required_skills if s.lower() in cand_lower]
         missing = [s for s in required_skills if s.lower() not in cand_lower]
     elif required_skills:
-        # No candidate skills found — check raw text as last resort
+        # Last resort — scan full text
         full_text = _get_full_text(parsed)
         if full_text:
             text_lower = full_text.lower()
@@ -178,11 +191,10 @@ def _generate_basic_report(candidate: Candidate, required_skills: list) -> Dict[
         else:
             missing = required_skills
 
-    # Step 4: Calculate skill match percentage (NOT the pretrained score)
-    # This is the % of required skills that were found in the resume
+    # Step 4: Skill match percentage
     match_pct = (len(matched) / len(required_skills) * 100) if required_skills else 0.0
 
-    # Step 5: Estimate experience level
+    # Step 5: Experience level
     exp_level = "Unknown"
     years = _get_experience_years(parsed)
     if years:
@@ -197,7 +209,7 @@ def _generate_basic_report(candidate: Candidate, required_skills: list) -> Dict[
         except (ValueError, TypeError):
             years = None
 
-    # Step 6: Build recommendations
+    # Step 6: Recommendations
     recommendations = []
     if status == "pending":
         recommendations.append("Resume is still being processed. Please check back in a moment.")
@@ -217,7 +229,7 @@ def _generate_basic_report(candidate: Candidate, required_skills: list) -> Dict[
     # Step 7: Next steps
     next_steps = []
     if not required_skills:
-        next_steps.append("Add required_skills during upload or via PUT /candidates/{id}/skills for skill matching.")
+        next_steps.append("Add required_skills during upload or via PUT /candidates/{id}/skills.")
     if not settings.ML_ENHANCE_SERVICE_URL:
         next_steps.append("Configure ML_ENHANCE_SERVICE_URL for AI-generated detailed reports.")
     if not next_steps:
@@ -233,7 +245,8 @@ def _generate_basic_report(candidate: Candidate, required_skills: list) -> Dict[
             f"Basic report for {candidate.name or 'candidate'}: "
             f"{len(candidate_skills)} skills found, "
             f"{len(matched)}/{len(required_skills)} required skills matched. "
-            f"Experience: {exp_level}{f' ({years:.0f} years)' if isinstance(years, float) else ''}."
+            f"Experience: {exp_level}"
+            f"{f' ({years:.0f} years)' if isinstance(years, float) else ''}."
         ),
         "skill_match_percentage": round(match_pct, 1),
         "experience_level": exp_level,
@@ -272,7 +285,6 @@ def _derive_skill_match(score_row: Optional[Score]) -> Dict[str, float]:
         score_row.breakdown if isinstance(score_row.breakdown, dict) else {}
     )
 
-    # Preferred shape from ML output
     existing = breakdown.get("skill_match")
     if isinstance(existing, dict):
         normalized = {}
@@ -284,7 +296,6 @@ def _derive_skill_match(score_row: Optional[Score]) -> Dict[str, float]:
         if normalized:
             return normalized
 
-    # Fallback 1: derive from explicit matched/missing skills
     matched = breakdown.get("matched_skills")
     missing = breakdown.get("missing_skills")
     if isinstance(matched, list):
@@ -301,7 +312,6 @@ def _derive_skill_match(score_row: Optional[Score]) -> Dict[str, float]:
         if derived:
             return derived
 
-    # Fallback 2: derive from score components
     mapping = {
         "skill": getattr(score_row, "skill_score", None),
         "experience": getattr(score_row, "experience_score", None),
@@ -577,20 +587,15 @@ async def get_candidate_report(
     candidate_id: str,
     db: Session = Depends(get_db),
 ):
-    """Get detailed candidate report from ML service.
+    """
+    Get detailed candidate report.
 
-    Tries ML service first if ML_ENHANCE_SERVICE_URL is configured.
-    Falls back to basic job-role agnostic report if ML service is unavailable.
+    Tries ML /candidate-report first (Gemini enhanced).
+    Falls back to basic skill-match report if ML unavailable.
 
-    Returns:
-        - overall_score: Overall matching score (0-100)
-        - matched_skills: List of skills matched from resume
-        - missing_skills: List of required skills not found
-        - recommendations: List of recommendations for the candidate
-        - explanation: Detailed explanation of the report
-        - skill_match_percentage: Percentage of required skills matched
-        - experience_level: Assessed experience level
-        - next_steps: Recommended next steps
+    NOTE: report.overall_score = skill match percentage (0-100%)
+          NOT the same as the pretrained score shown in /status.
+          Pretrained score is stored in Score table, shown via /status.
     """
     from app.services.ml_client import ml_client
 
@@ -610,7 +615,6 @@ async def get_candidate_report(
     report = None
     ml_service_error = None
 
-    # Try ML service first if configured
     if settings.ML_ENHANCE_SERVICE_URL:
         try:
             report = await ml_client.candidate_report(
@@ -618,24 +622,20 @@ async def get_candidate_report(
                 required_skills=required_skills,
                 job_role=job_role
             )
-            logger.info(f"ML report generated successfully for candidate {candidate_id}")
+            # Validate response is useful
+            if not report or report.get("overall_score", 0) == 0 and not report.get("matched_skills"):
+                logger.warning(f"ML returned empty report for candidate {candidate_id}, using fallback")
+                report = None
+            else:
+                logger.info(f"ML report generated for candidate {candidate_id}")
         except Exception as e:
             ml_service_error = str(e)
-            logger.warning(
-                f"ML service failed for candidate {candidate_id}: {ml_service_error}. "
-                f"Falling back to basic report."
-            )
-    else:
-        logger.warning(f"ML_ENHANCE_SERVICE_URL not configured, using basic report for candidate {candidate_id}")
+            logger.warning(f"ML service failed for {candidate_id}: {ml_service_error}")
 
-    # Fall back to basic report if ML service failed or not configured
     if report is None:
         report = _generate_basic_report(candidate, required_skills)
         if ml_service_error:
             report["ml_service_error"] = "ML service unavailable, showing basic report"
-    # Note: We intentionally do NOT overwrite report.overall_score with the pretrained score.
-    # report.overall_score should be skill match % (100% when all skills match)
-    # The pretrained score (47.16) is only shown in /status endpoint
 
     return {
         "candidate_id": candidate_id,
@@ -686,18 +686,7 @@ async def update_candidate_skills(
     request: UpdateSkillsRequest,
     db: Session = Depends(get_db)
 ):
-    """Update required skills for a candidate
-
-    Args:
-        candidate_id: The candidate ID
-        required_skills: List of skills to match against the resume
-
-    Example:
-        PUT /candidates/{id}/skills
-        {
-            "required_skills": ["Python", "JavaScript", "AWS"]
-        }
-    """
+    """Update required skills for a candidate"""
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
