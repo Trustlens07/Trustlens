@@ -10,6 +10,10 @@ RUN npm install
 # Copy all source code
 COPY . .
 
+# Fix permissions and build
+RUN chmod -R +x node_modules/.bin && \
+    npm run build
+
 # Build the app using Vite (since your project has vite.config.ts)
 # The build argument REACT_APP_API_BASE_URL will be replaced at build time
 ARG REACT_APP_API_BASE_URL
