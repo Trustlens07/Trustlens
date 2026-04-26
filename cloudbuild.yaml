@@ -29,8 +29,8 @@ steps:
       - '--port=8080'
       - '--memory=1Gi'
       - '--timeout=3600'
-      - '--set-env-vars=ENVIRONMENT=production,DEBUG=False,DATABASE_URL=${_DATABASE_URL},HF_API_KEY=${_HF_API_KEY},SUPABASE_KEY=${_SUPABASE_KEY},SUPABASE_URL=${_SUPABASE_URL},SUPABASE_SERVICE_KEY=${_SUPABASE_SERVICE_KEY}'
-      - '--set-secrets=FIREBASE_KEY=firebase-service-account:latest'
+      - '--set-env-vars=ENVIRONMENT=production,DEBUG=False,DATABASE_URL=${_DATABASE_URL},HF_API_KEY=${_HF_API_KEY},SUPABASE_KEY=${_SUPABASE_KEY},SUPABASE_URL=${_SUPABASE_URL}'
+      - '--set-secrets=FIREBASE_KEY=firebase-service-account:latest,SUPABASE_SERVICE_KEY=supabase-service-key:latest'
 
 images:
   - 'us-central1-docker.pkg.dev/trustlens-backend-493416/backend-repo/backend-image:$SHORT_SHA'
