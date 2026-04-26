@@ -29,11 +29,9 @@ steps:
       - '--port=8080'
       - '--memory=1Gi'
       - '--timeout=3600'
-      - '--set-env-vars=ENVIRONMENT=production,DEBUG=False,DATABASE_URL=${_DATABASE_URL},HF_API_KEY=${_HF_API_KEY},SUPABASE_KEY=${_SUPABASE_KEY},SUPABASE_URL=${_SUPABASE_URL}'
-      - '--set-secrets=FIREBASE_KEY=firebase-service-account:latest,SUPABASE_SERVICE_KEY=supabase-service-key:1'
       - '--min-instances=1'
       - '--max-instances=3'
-      - '--set-env-vars=ENVIRONMENT=production,DEBUG=False,DATABASE_URL=${_DATABASE_URL},HF_API_KEY=${_HF_API_KEY},SUPABASE_KEY=${_SUPABASE_KEY},SUPABASE_URL=${_SUPABASE_URL},ML_PARSING_SERVICE_URL=${_ML_PARSING_SERVICE_URL}'
+      - '--set-env-vars=ENVIRONMENT=production,DEBUG=False,DATABASE_URL=${_DATABASE_URL},HF_API_KEY=${_HF_API_KEY},SUPABASE_KEY=${_SUPABASE_KEY},SUPABASE_URL=${_SUPABASE_URL},ML_PARSING_SERVICE_URL=${_ML_PARSING_SERVICE_URL},ML_SCORING_SERVICE_URL=${_ML_SCORING_SERVICE_URL},ML_BIAS_SERVICE_URL=${_ML_BIAS_SERVICE_URL},ML_FEEDBACK_SERVICE_URL=${_ML_FEEDBACK_SERVICE_URL},ML_ENHANCE_SERVICE_URL=${_ML_ENHANCE_SERVICE_URL}'
       - '--set-secrets=FIREBASE_KEY=firebase-service-account:latest,SUPABASE_SERVICE_KEY=supabase-service-key:latest'
 
 images:
