@@ -16,7 +16,7 @@
     "@tanstack/react-query": "^5.62.0",
     "tailwind-merge": "^2.5.5",
     "react-hot-toast": "^2.4.1",
-    "firebase": "^10.14.0"
+    "firebase": "^10.14.0",
     "lucide-react": "^0.468.0"
   },
   "devDependencies": {
