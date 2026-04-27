@@ -6,29 +6,26 @@ WORKDIR /app
 # Copy dependency files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --legacy-peer-deps
+# Clean install
+RUN npm ci
 
 # Copy source code
 COPY . .
 
-# Fix executable permissions for npm scripts (Solves Error 126)
+# CRITICAL: Fix executable permissions for npm scripts
 RUN chmod -R +x node_modules/.bin
 
 # Build arguments
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-# Run the full build script (tsc + vite)
+# Build the application
 RUN npm run build
 
 # Stage 2: Production
 FROM nginx:alpine
 
-# Install curl for health checks
-RUN apk add --no-cache curl
-
-# Copy nginx config
+# Copy custom config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files
