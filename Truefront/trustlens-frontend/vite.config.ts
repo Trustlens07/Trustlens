@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    port: 5173,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'https://resume-backend-948277799081.us-central1.run.app',

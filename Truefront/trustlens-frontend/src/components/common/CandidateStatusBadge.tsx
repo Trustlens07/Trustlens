@@ -38,7 +38,13 @@ export function CandidateStatusBadge({ status, className }: CandidateStatusBadge
     },
   }
 
-  const config = statusConfig[status]
+  const config = statusConfig[status] || {
+    label: status || 'Unknown',
+    bgColor: 'bg-gray-100',
+    textColor: 'text-gray-600',
+    borderColor: 'border-gray-300',
+    dotColor: 'bg-gray-400',
+  }
 
   return (
     <span

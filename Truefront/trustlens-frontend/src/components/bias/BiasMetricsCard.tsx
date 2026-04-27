@@ -31,8 +31,8 @@ export function BiasMetricsCard({ metrics, overallFairnessScore }: BiasMetricsCa
           <h3 className="text-heading-md text-on-surface">Bias Metrics</h3>
           <div className="flex items-center gap-md">
             <span className="text-body text-on-surface-variant">Overall Fairness Score:</span>
-            <span className={cn('metric-value', getScoreColor(overallFairnessScore))}>
-              {overallFairnessScore.toFixed(1)}
+            <span className={cn('metric-value', getScoreColor(overallFairnessScore || 0))}>
+              {overallFairnessScore ? overallFairnessScore.toFixed(1) : 'N/A'}
             </span>
           </div>
         </div>
@@ -50,19 +50,29 @@ export function BiasMetricsCard({ metrics, overallFairnessScore }: BiasMetricsCa
             </tr>
           </thead>
           <tbody>
-            {metrics.map((metric, index) => (
+            {metrics && metrics.length > 0 ? metrics.map((metric, index) => (
               <tr key={index} className="border-b border-outline-variant hover:bg-surface-container">
-                <td className="py-md px-lg text-body text-on-surface font-medium">{metric.category}</td>
-                <td className="py-md px-lg text-body text-on-surface-variant">{metric.indicator}</td>
-                <td className="py-md px-lg text-body text-on-surface font-medium">{metric.value.toFixed(2)}</td>
-                <td className="py-md px-lg text-body text-on-surface-variant">{metric.threshold.toFixed(2)}</td>
+                <td className="py-md px-lg text-body text-on-surface font-medium">{metric.category || 'N/A'}</td>
+                <td className="py-md px-lg text-body text-on-surface-variant">{metric.indicator || 'N/A'}</td>
+                <td className="py-md px-lg text-body text-on-surface font-medium">
+                  {metric.value !== undefined ? metric.value.toFixed(2) : 'N/A'}
+                </td>
+                <td className="py-md px-lg text-body text-on-surface-variant">
+                  {metric.threshold !== undefined ? metric.threshold.toFixed(2) : 'N/A'}
+                </td>
                 <td className="py-md px-lg">
-                  <span className={cn('chip', getSeverityColor(metric.severity))}>
-                    {metric.severity}
+                  <span className={cn('chip', getSeverityColor(metric.severity || 'low'))}>
+                    {metric.severity || 'low'}
                   </span>
                 </td>
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan={5} className="text-center py-xl text-on-surface-variant text-body">
+                  No bias metrics available
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

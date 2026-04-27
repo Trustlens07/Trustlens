@@ -86,6 +86,20 @@ export default function Dashboard() {
         <Sidebar />
         <main className="main-content">
           <div className="container-fluid py-lg">
+            {/* Dashboard Header */}
+            <div className="flex items-center justify-between mb-lg">
+              <div>
+                <h2 className="text-heading-xl text-on-surface mb-xs">Candidate Dashboard</h2>
+                <p className="text-body text-on-surface-variant">Manage and view your candidate pool</p>
+              </div>
+              <button
+                onClick={() => navigate('/reports')}
+                className="btn btn-primary"
+              >
+                View Reports
+              </button>
+            </div>
+
             {/* Filters */}
             <div className="card mb-lg">
               <div className="flex flex-col sm:flex-row gap-md">
@@ -160,7 +174,7 @@ export default function Dashboard() {
                         cy="50%"
                         outerRadius={70}
                         dataKey="value"
-                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                        label={({ name, percent = 0 }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         labelLine={{ stroke: '#c3c6d7' }}
                       >
                         {statusPieData.map((entry, index) => (
@@ -271,18 +285,24 @@ export default function Dashboard() {
                       <td className="py-3 px-4 text-sm text-gray-600">{candidate.job_role}</td>
                       <td className="py-3 px-4 text-sm text-gray-600">
                         <div className="flex flex-wrap gap-1">
-                          {candidate.skills.slice(0, 3).map((skill, i) => (
-                            <span
-                              key={i}
-                              className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs"
-                            >
-                              {skill}
-                            </span>
-                          ))}
-                          {candidate.skills.length > 3 && (
-                            <span className="text-xs text-gray-500">
-                              +{candidate.skills.length - 3}
-                            </span>
+                          {candidate.skills && Array.isArray(candidate.skills) ? (
+                            <>
+                              {candidate.skills.slice(0, 3).map((skill, i) => (
+                                <span
+                                  key={i}
+                                  className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs"
+                                >
+                                  {skill}
+                                </span>
+                              ))}
+                              {candidate.skills.length > 3 && (
+                                <span className="text-xs text-gray-500">
+                                  +{candidate.skills.length - 3}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-xs text-gray-400">No skills</span>
                           )}
                         </div>
                       </td>

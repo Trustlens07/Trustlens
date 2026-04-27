@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useScreenResumes, useScreeningResults, useFairnessReport } from '../hooks/useScreening'
 import { useCandidates } from '../hooks/useCandidates'
 import { FairnessMode } from '../types/screening'
@@ -7,6 +8,7 @@ import { FairnessReport } from '../components/screening/FairnessReport'
 import toast from 'react-hot-toast'
 
 export default function ScreeningPage() {
+  const [searchParams] = useSearchParams()
   const [jobRole, setJobRole] = useState('')
   const [jobDescription, setJobDescription] = useState('')
   const [fairnessMode, setFairnessMode] = useState<FairnessMode>('standard')
@@ -14,6 +16,15 @@ export default function ScreeningPage() {
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([])
 
   const { data: candidates } = useCandidates({ limit: 100 })
+
+  // Auto-select uploaded candidates from URL parameters
+  useEffect(() => {
+    const candidateIds = searchParams.get('candidates')
+    if (candidateIds) {
+      const ids = candidateIds.split(',').filter(id => id.trim())
+      setSelectedCandidates(ids)
+    }
+  }, [searchParams])
   const screenResumes = useScreenResumes()
   const { data: results, isLoading: resultsLoading } = useScreeningResults(sessionId || '')
   const { data: fairnessReport } = useFairnessReport(sessionId || '')

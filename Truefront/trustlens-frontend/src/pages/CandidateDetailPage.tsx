@@ -11,6 +11,7 @@ import { FeedbackForm } from '../components/feedback/FeedbackForm'
 import { Skeleton } from '../components/common/Skeleton'
 import { useAuth } from '../hooks/useAuth'
 import { ScoreResponse } from '../types/score'
+import { Sparkles } from 'lucide-react'
 
 export default function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -111,14 +112,18 @@ export default function CandidateDetailPage() {
                     <CandidateStatusBadge status={candidate.status} />
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {candidate.skills.map((skill, i) => (
-                      <span
-                        key={i}
-                        className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs"
-                      >
-                        {skill}
-                      </span>
-                    ))}
+                    {candidate.skills && Array.isArray(candidate.skills) ? (
+                      candidate.skills.map((skill, i) => (
+                        <span
+                          key={i}
+                          className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs"
+                        >
+                          {skill}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-gray-400">No skills listed</span>
+                    )}
                   </div>
                 </div>
                 {status?.score !== undefined && (
@@ -134,16 +139,26 @@ export default function CandidateDetailPage() {
             </div>
 
             {/* Enhancement Panel */}
-            {candidate.status === 'completed' && !enhancedScore && (
+            {candidate.status === 'completed' && !enhancedScore && originalScore ? (
               <EnhancementPanel
                 candidateId={id}
                 originalScore={originalScore}
                 onEnhanced={handleEnhanced}
               />
-            )}
+            ) : candidate.status === 'completed' && !originalScore ? (
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200 p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="h-5 w-5 text-purple-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">AI Enhancement</h3>
+                </div>
+                <div className="text-center py-4 text-gray-600">
+                  Waiting for score data to enable AI enhancement...
+                </div>
+              </div>
+            ) : null}
 
             {/* Score Charts */}
-            {originalScore && (
+            {originalScore ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Score Breakdown</h3>
@@ -152,6 +167,16 @@ export default function CandidateDetailPage() {
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Skills Radar</h3>
                   <ScoreChart breakdown={originalScore.breakdown} type="radar" />
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Score Information</h3>
+                <div className="text-center py-8 text-gray-500">
+                  {candidate.status === 'completed' ? 
+                    'Score data is being processed...' : 
+                    'Process the candidate to view score information'
+                  }
                 </div>
               </div>
             )}
@@ -177,16 +202,37 @@ export default function CandidateDetailPage() {
             )}
 
             {/* Bias Metrics */}
-            {biasMetrics && candidate.status === 'completed' && (
+            {biasMetrics && biasMetrics.metrics && candidate.status === 'completed' ? (
               <BiasMetricsCard
                 metrics={biasMetrics.metrics}
                 overallFairnessScore={biasMetrics.overall_fairness_score}
               />
+            ) : candidate.status === 'completed' ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Bias Analysis</h3>
+                <div className="text-center py-8 text-gray-500">
+                  {biasMetrics ? 'Bias analysis data is incomplete...' : 'Bias analysis is being processed...'}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Bias Analysis</h3>
+                <div className="text-center py-8 text-gray-500">
+                  Process the candidate to view bias analysis
+                </div>
+              </div>
             )}
 
             {/* Feedback Form */}
-            {candidate.status === 'completed' && (
+            {candidate.status === 'completed' ? (
               <FeedbackForm candidateId={id} />
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Feedback</h3>
+                <div className="text-center py-8 text-gray-500">
+                  Process the candidate first to submit feedback
+                </div>
+              </div>
             )}
           </div>
         )}

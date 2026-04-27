@@ -25,29 +25,36 @@ interface ScoreChartProps {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
 export function ScoreChart({ breakdown, type = 'bar', comparison }: ScoreChartProps) {
+  // Add null checks for breakdown properties
+  const skills = breakdown?.skills || []
+  const skillsAvg = skills.length > 0 ? skills.reduce((acc, s) => acc + (s?.score || 0), 0) / skills.length : 0
+  
   const barData = [
-    { name: 'Skills', score: breakdown.skills.reduce((acc, s) => acc + s.score, 0) / breakdown.skills.length, fullMark: 100 },
-    { name: 'Experience', score: breakdown.experience, fullMark: 100 },
-    { name: 'Education', score: breakdown.education, fullMark: 100 },
-    { name: 'Projects', score: breakdown.projects, fullMark: 100 },
-    { name: 'Soft Skills', score: breakdown.soft_skills, fullMark: 100 },
+    { name: 'Skills', score: skillsAvg, fullMark: 100 },
+    { name: 'Experience', score: breakdown?.experience || 0, fullMark: 100 },
+    { name: 'Education', score: breakdown?.education || 0, fullMark: 100 },
+    { name: 'Projects', score: breakdown?.projects || 0, fullMark: 100 },
+    { name: 'Soft Skills', score: breakdown?.soft_skills || 0, fullMark: 100 },
   ]
 
   const radarData: any[] = [
-    { subject: 'Skills', A: breakdown.skills.reduce((acc, s) => acc + s.score, 0) / breakdown.skills.length, fullMark: 100 },
-    { subject: 'Experience', A: breakdown.experience, fullMark: 100 },
-    { subject: 'Education', A: breakdown.education, fullMark: 100 },
-    { subject: 'Projects', A: breakdown.projects, fullMark: 100 },
-    { subject: 'Soft Skills', A: breakdown.soft_skills, fullMark: 100 },
+    { subject: 'Skills', A: skillsAvg, fullMark: 100 },
+    { subject: 'Experience', A: breakdown?.experience || 0, fullMark: 100 },
+    { subject: 'Education', A: breakdown?.education || 0, fullMark: 100 },
+    { subject: 'Projects', A: breakdown?.projects || 0, fullMark: 100 },
+    { subject: 'Soft Skills', A: breakdown?.soft_skills || 0, fullMark: 100 },
   ]
 
   if (comparison) {
+    const compSkills = comparison?.skills || []
+    const compSkillsAvg = compSkills.length > 0 ? compSkills.reduce((acc, s) => acc + (s?.score || 0), 0) / compSkills.length : 0
+    
     const compData = [
-      comparison.skills.reduce((acc, s) => acc + s.score, 0) / comparison.skills.length,
-      comparison.experience,
-      comparison.education,
-      comparison.projects,
-      comparison.soft_skills,
+      compSkillsAvg,
+      comparison?.experience || 0,
+      comparison?.education || 0,
+      comparison?.projects || 0,
+      comparison?.soft_skills || 0,
     ]
     radarData.forEach((item, index) => {
       item.B = compData[index]
@@ -85,7 +92,7 @@ export function ScoreChart({ breakdown, type = 'bar', comparison }: ScoreChartPr
           <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
           <Tooltip
             contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-            formatter={(value: number) => [value.toFixed(1), '']}
+            formatter={(value: any) => [value ? Number(value).toFixed(1) : '0', '']}
           />
           <Bar dataKey="score" name="Original" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={24} />
           <Bar dataKey="enhanced" name="Enhanced" fill="#10b981" radius={[4, 4, 0, 0]} barSize={24} />
@@ -103,7 +110,7 @@ export function ScoreChart({ breakdown, type = 'bar', comparison }: ScoreChartPr
         <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
         <Tooltip
           contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-          formatter={(value: number) => [value.toFixed(1), 'Score']}
+          formatter={(value: any) => [value ? Number(value).toFixed(1) : '0', 'Score']}
         />
         <Bar dataKey="score" radius={[4, 4, 0, 0]} barSize={32}>
           {barData.map((_, index) => (

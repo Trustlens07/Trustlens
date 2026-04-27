@@ -75,7 +75,12 @@ export default function UploadPage() {
             resume: file,
           })),
         })
+        console.log('[Upload] Batch upload response:', uploadedCandidates)
         toast.success(`Batch uploaded successfully! ${uploadedCandidates.length} candidates added`)
+        
+        // Navigate to candidate list (Dashboard) to show uploaded candidates
+        console.log('[Upload] Candidates uploaded successfully, redirecting to candidate list')
+        setTimeout(() => navigate('/'), 1000)
       } else {
         if (!resume) {
           toast.error('Please select a resume file')
@@ -105,7 +110,12 @@ export default function UploadPage() {
           job_role: jobRole,
           resume,
         })
+        console.log('[Upload] Single upload response:', uploadedCandidate)
         toast.success(`${uploadedCandidate.name} uploaded successfully!`)
+        
+        // Navigate to candidate list (Dashboard) to show uploaded candidate
+        console.log('[Upload] Candidate uploaded successfully, redirecting to candidate list')
+        setTimeout(() => navigate('/'), 1000)
       }
       
       // Reset form
@@ -116,8 +126,11 @@ export default function UploadPage() {
       setResume(null)
       setBatchFiles([])
       
-      // Navigate to dashboard
-      setTimeout(() => navigate('/'), 1000)
+      // Fallback redirect to candidate list if specific redirect didn't work
+      setTimeout(() => {
+        console.log('[Upload] Fallback redirect to candidate list')
+        navigate('/')
+      }, 2000)
     } catch (error: any) {
       let errorMsg = 'Upload failed'
       
