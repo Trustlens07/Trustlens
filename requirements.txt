@@ -13,6 +13,10 @@ asyncpg>=0.29.0
 # File upload and validation
 python-multipart>=0.0.9
 aiofiles>=23.2.1
+python-magic>=0.4.27  # File type detection via magic bytes
+
+# Caching
+redis>=5.0.0  # Optional: Redis cache for ML responses
 
 # Authentication & Security
 python-jose[cryptography]>=3.3.0

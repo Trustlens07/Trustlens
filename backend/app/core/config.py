@@ -49,7 +49,23 @@ class Settings(BaseSettings):
         ).split(",")
         if origin.strip()
     ]
-    ALLOWED_HOSTS: List[str] = ["*"]
+    # Security - Allowed Hosts
+    # Default secure configuration - no wildcard in production
+    ALLOWED_HOSTS: List[str] = [
+        host.strip()
+        for host in os.getenv(
+            "ALLOWED_HOSTS",
+            "localhost,127.0.0.1,*.localhost,*.run.app"  # Cloud Run default
+        ).split(",")
+        if host.strip() and host.strip() != "*"  # Block wildcard in production
+    ] if ENVIRONMENT == "production" else ["*"]
+    
+    # Redis Cache
+    REDIS_URL: Optional[str] = os.getenv("REDIS_URL")
+    CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "1800"))  # 30 min default
+    
+    # Audit Logging
+    AUDIT_LOG_ENABLED: bool = os.getenv("AUDIT_LOG_ENABLED", "true").lower() == "true"
     
     # Rate Limiting
     RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))

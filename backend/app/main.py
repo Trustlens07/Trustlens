@@ -12,6 +12,7 @@ from app.core.logging import setup_logging
 from app.api.v1.router import api_router
 from app.middlewares.error_handler import add_exception_handlers
 from app.middlewares.request_logger import RequestLoggerMiddleware
+from app.middlewares.audit_logger import AuditLogMiddleware
 import firebase_admin
 from firebase_admin import credentials
 import os
@@ -82,6 +83,7 @@ app.add_middleware(
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 app.add_middleware(RequestLoggerMiddleware)
+app.add_middleware(AuditLogMiddleware)
 
 # Exception handlers
 add_exception_handlers(app)
