@@ -44,23 +44,21 @@ export default function Dashboard() {
 
   const { data, isLoading, error } = useCandidates(params)
 
+  // Debug React Query data
+  console.log('[Dashboard] React Query data:', data)
+  console.log('[Dashboard] React Query isLoading:', isLoading)
+  console.log('[Dashboard] React Query error:', error)
+
   const filteredCandidates = data?.candidates || []
 
   // Debug logging to check candidate data
-  console.log('[Dashboard] Candidates data:', {
-    total: filteredCandidates.length,
-    candidates: filteredCandidates.map(c => ({
-      id: c.id,
-      name: c.name,
-      job_role: c.job_role,
-      skills: c.skills,
-      skillsCount: c.skills?.length || 0,
-      status: c.status
-    }))
-  })
+  console.log('[Dashboard] Filtered candidates count:', filteredCandidates.length)
+  console.log('[Dashboard] First candidate:', filteredCandidates[0])
 
   // Detailed logging to see full data structure
-  console.log('[Dashboard] Full candidates data:', JSON.stringify(filteredCandidates, null, 2))
+  if (filteredCandidates.length > 0) {
+    console.log('[Dashboard] Full candidates data:', JSON.stringify(filteredCandidates.slice(0, 2), null, 2))
+  }
 
   // Status distribution for pie chart
   const statusCounts = filteredCandidates.reduce((acc, c) => {

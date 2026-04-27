@@ -7,7 +7,12 @@ import toast from 'react-hot-toast'
 export function useCandidates(params: FilterParams = {}) {
   return useQuery({
     queryKey: queryKeys.candidates.list(params),
-    queryFn: () => candidateService.getCandidates(params),
+    queryFn: async () => {
+      console.log('[useCandidates] Fetching with params:', params)
+      const result = await candidateService.getCandidates(params)
+      console.log('[useCandidates] Service returned:', result)
+      return result
+    },
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
