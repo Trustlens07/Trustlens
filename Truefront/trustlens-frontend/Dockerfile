@@ -1,36 +1,45 @@
-# Stage 1: Build the frontend
-FROM node:22-alpine AS build
+# Stage 1: Build
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy dependency files first for caching
+# Copy dependency files
 COPY package*.json ./
 
-# Use 'ci' to clean install dependencies. 
-# This is crucial to fix your #module-sync-enabled error, 
-# as it ensures a pristine node_modules folder.
-RUN npm ci
+# Install dependencies
+RUN npm ci --legacy-peer-deps
 
-# Copy the rest of the source code
+# Copy source code
 COPY . .
 
-# Set build arguments and env variables BEFORE the build
+# Fix executable permissions for npm scripts (Solves Error 126)
+RUN chmod -R +x node_modules/.bin
+
+# Build arguments
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-# Build the app once. 
-# We removed the redundant chmod and double-build commands.
+# Run the full build script (tsc + vite)
 RUN npm run build
 
-# Stage 2: Serve with Nginx
-FROM nginx:stable-alpine
+# Stage 2: Production
+FROM nginx:alpine
 
-# Copy custom nginx config
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy built files from the build stage
-COPY --from=build /app/dist /usr/share/nginx/html
+# Copy built files
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-EXPOSE 80
+# Expose port
+EXPOSE 8080
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+# Start nginx
 CMD ["nginx", "-g", "daemon off;"]

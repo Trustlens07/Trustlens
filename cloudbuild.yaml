@@ -8,6 +8,8 @@ steps:
       - '-f'
       - 'Truefront/trustlens-frontend/Dockerfile'
       - 'Truefront/trustlens-frontend'
+      - '--build-arg'
+      - 'VITE_API_BASE_URL=https://resume-backend-948277799081.us-central1.run.app'
 
   # Push the image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -26,7 +28,10 @@ steps:
       - '--region=us-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
-      - '--port=80'
+      - '--port=8080'
+      - '--memory=256Mi'
+      - '--timeout=300'
+      - '--set-env-vars=VITE_API_BASE_URL=https://resume-backend-948277799081.us-central1.run.app'
 
 images:
   - 'us-central1-docker.pkg.dev/trustlens-backend-493416/frontend-repo/frontend-image:$SHORT_SHA'
