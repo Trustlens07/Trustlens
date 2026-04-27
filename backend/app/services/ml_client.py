@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 ML_BASE_URL = settings.ML_PARSING_SERVICE_URL or ""  # e.g. https://preeee-276-ml-service-api.hf.space
 
 
-def _build_parsed_resume(parsed_data: Dict[str, Any]) -> Dict[str, Any]:
+def _build_parsed_resume(parsed_data: Dict[str, Any], file_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Convert our stored parsed_data into the ParsedResume schema the ML service expects.
 
@@ -26,6 +26,10 @@ def _build_parsed_resume(parsed_data: Dict[str, Any]) -> Dict[str, Any]:
     The ML service wants the inner ParsedResume object directly.
     """
     inner = parsed_data.get("parsed_data", parsed_data)
+
+    # Ensure file_name is set - ML service requires this field
+    # Try multiple sources: explicit param, inner data, or default
+    resolved_file_name = file_name or inner.get("file_name") or parsed_data.get("file_name") or "resume.pdf"
 
     # Normalise skills: ML service expects [{"name": str, "category": str, "proficiency": str}]
     raw_skills = inner.get("skills", [])
@@ -53,12 +57,19 @@ def _build_parsed_resume(parsed_data: Dict[str, Any]) -> Dict[str, Any]:
     normalised_exp = []
     for e in raw_exp:
         if isinstance(e, dict):
+            # Ensure duration_years is a float as required by ML service
+            duration = e.get("duration_years", 0.0)
+            try:
+                duration_float = float(duration) if duration is not None else 0.0
+            except (ValueError, TypeError):
+                duration_float = 0.0
+
             normalised_exp.append({
                 "title": e.get("title", ""),
                 "company": e.get("company", ""),
                 "start_date": e.get("start_date"),
                 "end_date": e.get("end_date"),
-                "duration_years": e.get("duration_years", 0.0),
+                "duration_years": duration_float,
                 "description": e.get("description", ""),
             })
 
@@ -89,7 +100,7 @@ def _build_parsed_resume(parsed_data: Dict[str, Any]) -> Dict[str, Any]:
     contact = inner.get("contact_info") or {}
 
     return {
-        "file_name": inner.get("file_name", "resume.pdf"),
+        "file_name": resolved_file_name,
         "upload_timestamp": inner.get("upload_timestamp", "2024-01-01T00:00:00"),
         "contact_info": {
             "name": contact.get("name"),
@@ -231,8 +242,10 @@ class MLClient:
 
         logger.info(
             f"📤 POST /score | mode={mode} | skills={len(required_skills or [])} | "
-            f"text_len={len(raw_text or '')}"
+            f"text_len={len(raw_text or '')} | file_name={resume_obj.get('file_name')}"
         )
+        logger.debug(f"Payload keys: {list(payload.keys())}")
+        logger.debug(f"Resume keys: {list(resume_obj.keys())}")
 
         response = await self.client.post(
             f"{self.base_url}/score",
@@ -308,8 +321,12 @@ class MLClient:
 
         logger.info(
             f"📋 POST /candidate-report | role={job_role or 'N/A'} | "
-            f"skills={len(required_skills or [])} | mode={mode}"
+            f"skills={len(required_skills or [])} | mode={mode} | "
+            f"text_len={len(raw_text or '')} | file_name={resume_obj.get('file_name')}"
         )
+        logger.debug(f"Payload keys: {list(payload.keys())}")
+        logger.debug(f"Resume keys: {list(resume_obj.keys())}")
+        logger.debug(f"Experience entries: {len(resume_obj.get('experience', []))}")
 
         response = await self.client.post(
             f"{self.base_url}/candidate-report",
