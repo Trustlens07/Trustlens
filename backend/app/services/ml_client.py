@@ -52,6 +52,8 @@ def _build_parsed_resume(parsed_data: Dict[str, Any], file_name: Optional[str] =
                         "proficiency": "intermediate",
                     })
 
+    logger.debug(f"Normalised {len(normalised_skills)} skills")
+
     # Normalise experience entries
     raw_exp = inner.get("experience", [])
     normalised_exp = []
@@ -64,14 +66,27 @@ def _build_parsed_resume(parsed_data: Dict[str, Any], file_name: Optional[str] =
             except (ValueError, TypeError):
                 duration_float = 0.0
 
+            title = (e.get("title") or "").strip()
+            company = (e.get("company") or "").strip()
+            start_date = (e.get("start_date") or "").strip() or None
+            end_date = (e.get("end_date") or "").strip() or None
+            description = (e.get("description") or "").strip()
+
+            # Skip empty entries (ML service requires title or company)
+            if not title and not company:
+                logger.debug(f"   ⊘ Skipping empty experience entry (no title/company)")
+                continue
+
             normalised_exp.append({
-                "title": e.get("title", ""),
-                "company": e.get("company", ""),
-                "start_date": e.get("start_date"),
-                "end_date": e.get("end_date"),
+                "title": title,
+                "company": company,
+                "start_date": start_date,
+                "end_date": end_date,
                 "duration_years": duration_float,
-                "description": e.get("description", ""),
+                "description": description,
             })
+
+    logger.debug(f"Normalised {len(normalised_exp)} experience entries")
 
     # Normalise education entries
     raw_edu = inner.get("education", [])
