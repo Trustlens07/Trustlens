@@ -50,15 +50,12 @@ Supports both digital and scanned PDFs via OCR fallback, fairness redaction, sta
 | `POST` | `/parse` | Upload a resume → returns structured `parsed_data` + raw text preview | No |
 | `POST` | `/score` | Score a candidate (baseline or enhanced) | No |
 | `POST` | `/score/compare` | Compare baseline vs enhanced on the same resume | No |
-| `POST` | `/candidate-report` | Detailed, human‑readable report for candidate login | No |
+| `POST` | `/candidate-report` | Detailed, human‑readable report  | No |
 | `POST` | `/bias/detect` | Statistical bias detection across a group of candidates | No |
 | `GET` | `/skills` | List all skills (for autocomplete) | No |
 | `POST` | `/gemini/explain-score` | Explain difference between baseline and enhanced score | No |
-| `POST` | `/gemini/interview-questions` | Generate personalised interview questions | No |
 | `POST` | `/gemini/extract-skills` | Convert job description to required skills list | No |
-| `POST` | `/gemini/cultural-fit` | Estimate cultural fit based on company values | No |
 | `POST` | `/gemini/summarise` | Generate a 2‑3 sentence professional summary | No |
-| `POST` | `/gemini/rank-candidates` | Rank multiple candidates for a job | No |
 | `POST` | `/gemini/adjust-weights` | Recommend scoring weights from job description | No |
 | `POST` | `/gemini/feedback` | Generate a short, professional feedback email | No |
 
