@@ -19,17 +19,32 @@ export const scoringService = {
           candidate_id: d.candidate_id ?? candidateId,
           version: (d.version as ScoreVersion) ?? version,
           breakdown: {
-            skills: d.breakdown?.skills
-              ? Object.entries(d.breakdown.skills).map(([skill, score]) => ({
+            skills: (() => {
+              const raw = d.breakdown?.skills
+              if (raw && typeof raw === 'object' && !Array.isArray(raw) && Object.keys(raw).length > 0) {
+                return Object.entries(raw).map(([skill, score]) => ({
                   skill,
                   score: Number(score),
                   relevance: 1,
                 }))
-              : [{ skill: 'Overall', score: d.skill_score ?? 0, relevance: 1 }],
+              }
+              if (Array.isArray(raw) && raw.length > 0) {
+                return raw
+              }
+              // Fallback: use skill_score as single entry
+              const fallbackScore = d.skill_score ?? d.breakdown?.overall ?? 0
+              return fallbackScore > 0
+                ? [{ skill: 'Overall Skills', score: Number(fallbackScore), relevance: 1 }]
+                : []
+            })(),
             experience: d.experience_score ?? d.breakdown?.experience ?? 0,
             education: d.education_score ?? d.breakdown?.education ?? 0,
             projects: d.breakdown?.projects ?? 0,
-            soft_skills: d.breakdown?.soft_skills ?? 0,
+            soft_skills: typeof d.breakdown?.soft_skills === 'number'
+              ? d.breakdown.soft_skills
+              : typeof d.experience_score === 'number'
+                ? 0
+                : 0,
             overall: d.overall_score ?? 0,
           },
           explanation: d.explanation ?? d.bias_correction_applied ?? '',
@@ -87,17 +102,32 @@ export const scoringService = {
           candidate_id: d.candidate_id ?? candidateId,
           version: 'enhanced',
           breakdown: {
-            skills: d.breakdown?.skills
-              ? Object.entries(d.breakdown.skills).map(([skill, score]) => ({
+            skills: (() => {
+              const raw = d.breakdown?.skills
+              if (raw && typeof raw === 'object' && !Array.isArray(raw) && Object.keys(raw).length > 0) {
+                return Object.entries(raw).map(([skill, score]) => ({
                   skill,
                   score: Number(score),
                   relevance: 1,
                 }))
-              : [{ skill: 'Overall', score: d.skill_score ?? 0, relevance: 1 }],
+              }
+              if (Array.isArray(raw) && raw.length > 0) {
+                return raw
+              }
+              // Fallback: use skill_score as single entry
+              const fallbackScore = d.skill_score ?? d.breakdown?.overall ?? 0
+              return fallbackScore > 0
+                ? [{ skill: 'Overall Skills', score: Number(fallbackScore), relevance: 1 }]
+                : []
+            })(),
             experience: d.experience_score ?? d.breakdown?.experience ?? 0,
             education: d.education_score ?? d.breakdown?.education ?? 0,
             projects: d.breakdown?.projects ?? 0,
-            soft_skills: d.breakdown?.soft_skills ?? 0,
+            soft_skills: typeof d.breakdown?.soft_skills === 'number'
+              ? d.breakdown.soft_skills
+              : typeof d.experience_score === 'number'
+                ? 0
+                : 0,
             overall: d.overall_score ?? 0,
           },
           explanation: d.explanation ?? d.bias_correction_applied ?? '',
