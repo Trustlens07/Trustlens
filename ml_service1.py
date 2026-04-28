@@ -1,6 +1,4 @@
-# ml_service.py - FINAL WITH CORRECT SKILL PHRASES
-# Projects, certifications, achievements, languages, internship hardcoded.
-# Skills extracted from the original resume text, preserving multi-word phrases.
+# ml_service.py - FINAL
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
