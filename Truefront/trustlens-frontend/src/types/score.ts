@@ -21,6 +21,7 @@ export interface ScoreResponse {
   breakdown: ScoreBreakdown
   calculated_at: string
   explanation?: string
+  ranking_percentile?: number
 }
 
 export interface CandidateStatusWithScore {

@@ -117,7 +117,7 @@ export interface ExportResultsRequest {
   format?: 'csv' | 'json'
 }
 
-export interface Score {
+export interface CandidateScore {
   candidate_id: string
   overall_score: number
   skill_score: number
@@ -128,7 +128,7 @@ export interface Score {
 }
 
 export interface CandidateWithScore extends Candidate {
-  overall_score?: number
+  score?: CandidateScore
 }
 
 export interface ApiError {

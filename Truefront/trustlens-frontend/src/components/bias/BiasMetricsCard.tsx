@@ -76,10 +76,6 @@ export function BiasMetricsCard({ metrics, overallFairnessScore }: BiasMetricsCa
           </tbody>
         </table>
       </div>
-
-      {metrics.length === 0 && (
-        <div className="text-center py-xl text-on-surface-variant text-body">No bias metrics available</div>
-      )}
     </div>
   )
 }

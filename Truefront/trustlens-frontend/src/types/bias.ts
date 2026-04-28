@@ -9,9 +9,11 @@ export interface BiasMetric {
   description: string
 }
 
+export type BiasScoreVersion = 'original' | 'enhanced' | 'fairness_adjusted'
+
 export interface BiasMetricsResponse {
   candidate_id: string
-  version: 'original' | 'enhanced'
+  version: BiasScoreVersion
   metrics: BiasMetric[]
   overall_fairness_score: number
   demographic_breakdown: {
