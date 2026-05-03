@@ -478,20 +478,26 @@ TrustLens aligns with:
 # 📸 Screenshots
 
 ## Dashboard
-_Add screenshot here_
+<img width="1004" height="790" alt="image" src="https://github.com/user-attachments/assets/08636bce-9d8f-4031-9dff-008f234c03ce" />
+
 
 ## Bias Analytics
-_Add screenshot here_
+<img width="1189" height="591" alt="image" src="https://github.com/user-attachments/assets/8ce018e3-7286-4d1d-83cb-55c56b548e5d" />
+<img width="1189" height="410" alt="image" src="https://github.com/user-attachments/assets/6ea15390-fc3d-4b7b-8f76-e6ae32250f01" />
 
 ## Candidate Report
-_Add screenshot here_
+<img width="1059" height="614" alt="image" src="https://github.com/user-attachments/assets/e06e0f14-5579-4f79-8ca5-c581b3fef0f8" />
+<img width="1053" height="300" alt="image" src="https://github.com/user-attachments/assets/c0554e49-e2ea-4e63-bcf0-71cf8758558a" />
 
-## Blind Screening
-_Add screenshot here_
+
+## Report
+<img width="1119" height="702" alt="image" src="https://github.com/user-attachments/assets/f483ffc8-04dc-40b7-9f7d-494ac74ad278" />
 
 ---
 
 # 🔗 Live Demo & Links
+<iframe width="560" height="315" src="https://youtu.be/W3JVRoSupQQ?si=MyJohB0up_T8y6dB" frameborder="0" allowfullscreen></iframe>
+
 
 ## ML Service API
 https://preeee-276-ml-service-api.hf.space/docs
